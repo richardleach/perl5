@@ -448,7 +448,6 @@ L<IO> has been upgraded from version 1.39 to 1.40.
 
 =item *
 
-XXX
 IO-Compress has been upgraded from version 2.074 to 2.084.
 
 Adds support for C<< IO::Uncompress::Zstd >> and
@@ -520,7 +519,6 @@ L<ODBM_File> has been upgraded from version 1.15 to 1.16.
 
 =item *
 
-XXX
 PathTools has been upgraded from version 3.74 to 3.78.
 
 =item *
