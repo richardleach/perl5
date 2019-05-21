@@ -169,6 +169,9 @@ recursive, but it's recursive on basic blocks, not on tree nodes.
 #define CALL_RPEEP(o) PL_rpeepp(aTHX_ o)
 #define CALL_OPFREEHOOK(o) if (PL_opfreehook) PL_opfreehook(aTHX_ o)
 
+/* should match anything that uses ck_ftst */
+#define OP_IS_STAT(op) (OP_IS_FILETEST(op) || op == OP_STAT || op == OP_STAT)
+
 static const char array_passed_to_stat[] = "Array passed to stat will be coerced to a scalar";
 
 /* Used to avoid recursion through the op tree in scalarvoid() and
@@ -991,8 +994,7 @@ Perl_op_clear(pTHX_ OP *o)
 	o->op_targ = 0;
 	break;
     default:
-	if (!(o->op_flags & OPf_REF)
-	    || (PL_check[o->op_type] != Perl_ck_ftst))
+	if (!(o->op_flags & OPf_REF) || !OP_IS_STAT(o->op_type))
 	    break;
 	/* FALLTHROUGH */
     case OP_GVSV:
@@ -4413,8 +4415,7 @@ Perl_op_lvalue_flags(pTHX_ OP *o, I32 type, U32 flags)
     /* [20011101.069 (#7861)] File test operators interpret OPf_REF to mean that
        their argument is a filehandle; thus \stat(".") should not set
        it. AMS 20011102 */
-    if (type == OP_REFGEN &&
-        PL_check[o->op_type] == Perl_ck_ftst)
+    if (type == OP_REFGEN && OP_IS_STAT(o->op_type))
         return o;
 
     if (type != OP_LEAVESUBLV)
@@ -11696,9 +11697,8 @@ Perl_ck_ftst(pTHX_ OP *o)
 	scalar((OP *) kid);
 	if ((PL_hints & HINT_FILETEST_ACCESS) && OP_IS_FILETEST_ACCESS(o->op_type))
 	    o->op_private |= OPpFT_ACCESS;
-	if (type != OP_STAT && type != OP_LSTAT
-            && PL_check[kidtype] == Perl_ck_ftst
-            && kidtype != OP_STAT && kidtype != OP_LSTAT
+	if (OP_IS_FILETEST(type)
+            && OP_IS_FILETEST(kidtype)
         ) {
 	    o->op_private |= OPpFT_STACKED;
 	    kid->op_private |= OPpFT_STACKING;
