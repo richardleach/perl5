@@ -4348,7 +4348,8 @@ X<my>
 A L<C<my>|/my VARLIST> declares the listed variables to be local
 (lexically) to the enclosing block, file, or L<C<eval>|/eval EXPR>.  If
 more than one variable is listed, the list must be placed in
-parentheses.
+parentheses. Variables should not subsequently be redeclared in the
+same scope or statement.
 
 The exact semantics and interface of TYPE and ATTRS are still
 evolving.  TYPE may be a bareword, a constant declared
