@@ -199,7 +199,7 @@ use File::Glob qw(:case);
     },
 
     'Compress::Raw::Bzip2' => {
-        'DISTRIBUTION' => 'PMQS/Compress-Raw-Bzip2-2.096.tar.gz',
+        'DISTRIBUTION' => 'PMQS/Compress-Raw-Bzip2-2.100.tar.gz',
         'FILES'        => q[cpan/Compress-Raw-Bzip2],
         'EXCLUDED'     => [
             qr{^t/Test/},
@@ -211,7 +211,7 @@ use File::Glob qw(:case);
     },
 
     'Compress::Raw::Zlib' => {
-        'DISTRIBUTION' => 'PMQS/Compress-Raw-Zlib-2.096.tar.gz',
+        'DISTRIBUTION' => 'PMQS/Compress-Raw-Zlib-2.100.tar.gz',
         'FILES'    => q[cpan/Compress-Raw-Zlib],
         'EXCLUDED' => [
             qr{^examples/},
@@ -493,7 +493,7 @@ use File::Glob qw(:case);
     },
 
     'ExtUtils::Manifest' => {
-        'DISTRIBUTION' => 'ETHER/ExtUtils-Manifest-1.72.tar.gz',
+        'DISTRIBUTION' => 'ETHER/ExtUtils-Manifest-1.73.tar.gz',
         'FILES'        => q[cpan/ExtUtils-Manifest],
         'EXCLUDED'     => [
             qr(^t/00-report-prereqs),
@@ -636,7 +636,7 @@ use File::Glob qw(:case);
     },
 
     'IO-Compress' => {
-        'DISTRIBUTION' => 'PMQS/IO-Compress-2.096.tar.gz',
+        'DISTRIBUTION' => 'PMQS/IO-Compress-2.100.tar.gz',
         'FILES'        => q[cpan/IO-Compress],
         'EXCLUDED'     => [
             qr{^examples/},
@@ -692,7 +692,7 @@ use File::Glob qw(:case);
     },
 
     'libnet' => {
-        'DISTRIBUTION' => 'SHAY/libnet-3.12.tar.gz',
+        'DISTRIBUTION' => 'SHAY/libnet-3.13.tar.gz',
         'FILES'        => q[cpan/libnet],
         'EXCLUDED'     => [
             qw( Configure
@@ -811,7 +811,7 @@ use File::Glob qw(:case);
     },
 
     'Module::CoreList' => {
-        'DISTRIBUTION' => 'BINGOS/Module-CoreList-5.20201120.tar.gz',
+        'DISTRIBUTION' => 'BINGOS/Module-CoreList-5.20210120.tar.gz',
         'FILES'        => q[dist/Module-CoreList],
     },
 
@@ -1002,7 +1002,7 @@ use File::Glob qw(:case);
     },
 
     'Socket' => {
-        'DISTRIBUTION' => 'PEVANS/Socket-2.030.tar.gz',
+        'DISTRIBUTION' => 'PEVANS/Socket-2.031.tar.gz',
         'FILES'        => q[cpan/Socket],
     },
 

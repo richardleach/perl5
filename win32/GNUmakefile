@@ -2,7 +2,7 @@
 # Makefile to build perl on Windows using GMAKE.
 # Supported compilers:
 #	Microsoft Visual C++ 7.0 or later
-#	MinGW with gcc-3.4.5 or later with runtime < 3.21
+#	MinGW with gcc-3.4.5-5.3.0
 #	MinGW64 with gcc-4.4.3 or later
 #	Windows SDK 64-bit compiler and tools
 #
@@ -64,7 +64,7 @@ INST_TOP := $(INST_DRV)\perl
 # versioned installation can be obtained by setting INST_TOP above to a
 # path that includes an arbitrary version string.
 #
-#INST_VER	:= \5.33.6
+#INST_VER	:= \5.33.7
 
 #
 # Comment this out if you DON'T want your perl installation to have
@@ -493,6 +493,13 @@ ifeq ($(USE_QUADMATH),define)
 ARCHNAME	:= $(ARCHNAME)-quadmath
 endif
 
+ifeq ($(CCTYPE),GCC)
+GCCVER		:= $(shell $(GCCBIN) -dumpversion)
+GCCVER1		:= $(shell for /f "delims=. tokens=1,2,3" %%i in ('$(GCCBIN) -dumpversion') do echo %%i)
+GCCVER2		:= $(shell for /f "delims=. tokens=1,2,3" %%i in ('$(GCCBIN) -dumpversion') do echo %%j)
+GCCVER3		:= $(shell for /f "delims=. tokens=1,2,3" %%i in ('$(GCCBIN) -dumpversion') do echo %%k)
+endif
+
 # Set the install location of the compiler headers/libraries.
 # These are saved into $Config{incpath} and $Config{libpth}.
 ifneq ($(GCCCROSS),)
@@ -501,7 +508,7 @@ CCLIBDIR := $(CCHOME)\$(GCCCROSS)\lib
 ARCHPREFIX := $(GCCCROSS)-
 else ifeq ($(CCTYPE),GCC)
 CCINCDIR := $(CCHOME)\include
-CCLIBDIR := $(CCHOME)\lib
+CCLIBDIR := $(CCHOME)\lib;$(CCHOME)\$(GCCTARGET)\lib;$(CCHOME)\lib\gcc\$(GCCTARGET)\$(GCCVER)
 ARCHPREFIX :=
 else
 CCINCDIR := $(CCHOME)\include
@@ -530,7 +537,7 @@ endif
 # Set DLL location for GCC compilers.
 ifeq ($(CCTYPE),GCC)
 ifneq ($(GCCCROSS),)
-CCDLLDIR := $(CCLIBDIR)
+CCDLLDIR := $(CCHOME)\$(GCCCROSS)\lib
 else
 CCDLLDIR := $(CCHOME)\bin
 endif
@@ -575,9 +582,6 @@ BUILDOPT        += -D__USE_MINGW_ANSI_STDIO
 MINIBUILDOPT    += -D__USE_MINGW_ANSI_STDIO
 endif
 
-GCCVER1   := $(shell for /f "delims=. tokens=1,2,3" %%i in ('gcc -dumpversion') do echo %%i)
-GCCVER2   := $(shell for /f "delims=. tokens=1,2,3" %%i in ('gcc -dumpversion') do echo %%j)
-GCCVER3   := $(shell for /f "delims=. tokens=1,2,3" %%i in ('gcc -dumpversion') do echo %%k)
 
 # If you are using GCC, 4.3 or later by default we add the -fwrapv option.
 # See https://github.com/Perl/perl5/issues/13690
@@ -627,7 +631,7 @@ ifeq ($(USE_CPLUSPLUS),define)
 EXTRACFLAGS	+= $(CXX_FLAG)
 endif
 CFLAGS		= $(EXTRACFLAGS) $(INCLUDES) $(DEFINES) $(LOCDEFS) $(OPTIMIZE)
-LINK_FLAGS	= $(LINK_DBG) -L"$(INST_COREDIR)" -L"$(CCLIBDIR)"
+LINK_FLAGS	= $(LINK_DBG) -L"$(INST_COREDIR)" -L"$(subst ;," -L",$(CCLIBDIR))"
 OBJOUT_FLAG	= -o
 EXEOUT_FLAG	= -o
 LIBOUT_FLAG	=
@@ -1776,7 +1780,7 @@ utils: $(HAVEMINIPERL) ..\utils\Makefile
 	copy ..\README.tw       ..\pod\perltw.pod
 	copy ..\README.vos      ..\pod\perlvos.pod
 	copy ..\README.win32    ..\pod\perlwin32.pod
-	copy ..\pod\perldelta.pod ..\pod\perl5336delta.pod
+	copy ..\pod\perldelta.pod ..\pod\perl5337delta.pod
 	$(MINIPERL) -I..\lib $(PL2BAT) $(UTILS)
 	$(MINIPERL) -I..\lib ..\autodoc.pl ..
 	$(MINIPERL) -I..\lib ..\pod\perlmodlib.PL -q ..
@@ -1874,7 +1878,7 @@ distclean: realclean
 	-if exist $(LIBDIR)\Win32API rmdir /s /q $(LIBDIR)\Win32API
 	-if exist $(LIBDIR)\XS rmdir /s /q $(LIBDIR)\XS
 	-cd $(PODDIR) && del /f *.html *.bat roffitall \
-	    perl5336delta.pod perlaix.pod perlamiga.pod perlandroid.pod \
+	    perl5337delta.pod perlaix.pod perlamiga.pod perlandroid.pod \
 	    perlapi.pod perlbs2000.pod perlcn.pod perlcygwin.pod \
 	    perldos.pod perlfreebsd.pod perlhaiku.pod perlhpux.pod \
 	    perlhurd.pod perlintern.pod perlirix.pod perljp.pod perlko.pod \
