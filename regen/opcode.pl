@@ -1090,6 +1090,7 @@ my %opclass = (
     '}',  13,		# loopexop
     '.',  14,		# methop
     '+',  15,		# unop_aux
+    ':',  16,		# unop_pad
 );
 
 my %opflags = (

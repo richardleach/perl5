@@ -199,7 +199,7 @@ use strict;
     # find which ops use 0,1,2,3 or 4 bits of op_private for arg count info
 
     $args0{$_} = 1 for qw(entersub avhvswitch
-                       rv2hv);                  # UNOPs that usurp bit 0
+                       rv2hv);         # UNOPs that usurp bit 0
 
     # Historically, bit ops used bit 0 to indicate 'use integer' in scope;
     # For now, ban use of bits 0..1 as an arg count, in order to detect
@@ -234,7 +234,7 @@ use strict;
                             # substr starts off with 4 bits set in
                             # ck_fun(), but since it never has more than 7
                             # args, bit 3 is later stolen
-                            qw(substr);
+                            qw(substr padsv2padsv);
 
     $args4{$_} = 1 for  keys %maxarg,
                         grep !$args0{$_} && !$args1{$_}
@@ -318,7 +318,7 @@ addbits($_, 7 => qw(OPpLVAL_INTRO LVINTRO))
     for qw(gvsv rv2sv rv2hv rv2gv rv2av aelem helem aslice split
            hslice delete padsv padav padhv enteriter entersub padrange
            pushmark cond_expr refassign lvref lvrefslice lvavref multideref
-           multiconcat),
+           multiconcat padsv_store padsv2padsv),
            'list', # this gets set in my_attrs() for some reason
            ;
 
@@ -499,7 +499,8 @@ addbits($_, 7 => qw(OPpPV_IS_UTF8 UTF)) for qw(last redo next goto dump);
 #   \state $foo = ...
 
 addbits($_, 6 => qw(OPpPAD_STATE STATE))  for qw(padav padhv padsv lvavref
-                                                 lvref refassign pushmark);
+                                                 lvref refassign pushmark
+                                                 padsv_store padsv2padsv);
 
 # NB: both sassign and aassign use the 'OPpASSIGN' naming convention
 # for their private flags
@@ -526,7 +527,9 @@ addbits('sassign',
     7 => qw(OPpASSIGN_CV_TO_GV  CV2GV),  # Possible optimisation for constants
 );
 
-
+addbits('padsv2padsv',
+    3 => qw(OPpASSIGN_UNDEF UNDEF),      # RHS was originally pp_undef
+);
 
 for (qw(trans transr)) {
     addbits($_,

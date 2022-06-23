@@ -94,6 +94,8 @@ transr		transliteration (tr///)	ck_match	is"	S
 # Lvalue operators.
 
 sassign		scalar assignment	ck_sassign	s2	S S
+padsv_store	padsv scalar assignment	ck_sassign	sT1	S S
+padsv2padsv	padsv-padsv assignment	ck_sassign	sT+	S S
 aassign		list assignment		ck_null		t2	L L
 
 chop		chop			ck_spair	mts%	L

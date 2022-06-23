@@ -153,6 +153,7 @@ Deprecated.  Use C<GIMME_V> instead.
                                 /*  On OP_DUMP, has no label */
                                 /*  On OP_UNSTACK, in a C-style for loop */
                                 /*  On OP_READLINE, it's for <<>>, not <> */
+                                /*  on OP_SASSIGN_STORE, source = UNDEF */
 /* There is no room in op_flags for this one, so it has its own bit-
    field member (op_folded) instead.  The flag is only used to tell
    op_convert_list to set op_folded.  */
@@ -218,6 +219,12 @@ struct unop_aux {
     BASEOP
     OP  	  *op_first;
     UNOP_AUX_item *op_aux;
+};
+
+struct unop_pad {
+    BASEOP
+    OP          *op_first;
+    PADOFFSET   op_padix;
 };
 
 struct binop {
@@ -447,6 +454,7 @@ struct loop {
 
 #define cUNOPx(o)	((UNOP*)(o))
 #define cUNOP_AUXx(o)	((UNOP_AUX*)(o))
+#define cUNOP_PADx(o)   ((UNOP_PAD*)(o))
 #define cBINOPx(o)	((BINOP*)(o))
 #define cLISTOPx(o)	((LISTOP*)(o))
 #define cLOGOPx(o)	((LOGOP*)(o))
@@ -460,6 +468,7 @@ struct loop {
 
 #define cUNOP		cUNOPx(PL_op)
 #define cUNOP_AUX	cUNOP_AUXx(PL_op)
+#define cUNOP_PAD	cUNOP_PADx(PL_op)
 #define cBINOP		cBINOPx(PL_op)
 #define cLISTOP		cLISTOPx(PL_op)
 #define cLOGOP		cLOGOPx(PL_op)
@@ -472,6 +481,7 @@ struct loop {
 
 #define cUNOPo		cUNOPx(o)
 #define cUNOP_AUXo	cUNOP_AUXx(o)
+#define cUNOP_PADo	cUNOP_PADx(o)
 #define cBINOPo		cBINOPx(o)
 #define cLISTOPo	cLISTOPx(o)
 #define cLOGOPo		cLOGOPx(o)
@@ -484,6 +494,7 @@ struct loop {
 
 #define kUNOP		cUNOPx(kid)
 #define kUNOP_AUX	cUNOP_AUXx(kid)
+#define kUNOP_PAD	cUNOP_PADx(kid)
 #define kBINOP		cBINOPx(kid)
 #define kLISTOP		cLISTOPx(kid)
 #define kLOGOP		cLOGOPx(kid)
@@ -509,7 +520,8 @@ typedef enum {
     OPclass_LOOP,     /* 10 */
     OPclass_COP,      /* 11 */
     OPclass_METHOP,   /* 12 */
-    OPclass_UNOP_AUX  /* 13 */
+    OPclass_UNOP_AUX,  /* 13 */
+    OPclass_UNOP_PAD  /* 14 */
 } OPclass;
 
 

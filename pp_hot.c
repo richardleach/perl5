@@ -123,6 +123,110 @@ PP(pp_and)
     }
 }
 
+
+/*
+ * Mashup of (padsv|undef) + padsv + sassign OPs
+ * Note: could potentially become (padsv|undef|const) in the future
+ * Doesn't support the following lengthy and unlikely sassign case:
+ *    (UNLIKELY(PL_op->op_private & OPpASSIGN_CV_TO_GV))
+ *  These cases have a separate optimization, so are not handled here:
+ *    (PL_op->op_private & OPpASSIGN_BACKWARDS) {or,and,dor}assign
+*/
+
+PP(pp_padsv2padsv)
+{
+    dSP;
+    OP * const op = PL_op;
+    SV** const padentry = &PAD_SVl(op->op_targ); /* 1st pp_padsv*/
+    SV* targ = *padentry;
+    SV* val = (op->op_private & OPpASSIGN_UNDEF)
+                ? &PL_sv_undef                   /* pp_undef */
+                : PAD_SV((long)cUNOP_AUXx(op)->op_aux)  /* 2nd pp_padsv */
+                ;
+
+    /* OPf_STACKED is handled by pp_padsv_store */
+    assert(!(op->op_flags & OPf_STACKED));
+
+    /* Inlined, simplified pp_padsv here */
+    if (op->op_private & OPpLVAL_INTRO) {
+        if (!(op->op_private & OPpPAD_STATE)) {
+            save_clearsv(padentry);
+        }
+    }
+    if (op->op_private & OPpDEREF) {
+        targ = vivify_ref(targ, op->op_private & OPpDEREF);
+    }
+
+    /* This is for the SETs later on. */
+/* Why does it even SETs in VOID context tho? */
+    EXTEND(SP,1);
+    SP++;
+
+    assert(TAINTING_get || !TAINT_get);
+    if (UNLIKELY(TAINT_get) && !SvTAINTED(val))
+        TAINT_NOT;
+
+    if (
+      UNLIKELY(SvTEMP(targ)) && !SvSMAGICAL(targ) && SvREFCNT(targ) == 1 &&
+      (!isGV_with_GP(targ) || SvFAKE(targ)) && ckWARN(WARN_MISC)
+    )
+        Perl_warner(aTHX_
+            packWARN(WARN_MISC), "Useless assignment to a temporary"
+        );
+    SvSetMagicSV(targ, val);
+
+    SETs(targ);
+    PUTBACK;
+    RETURN;
+}
+
+/*
+ * Mashup of simple padsv + sassign OPs
+ * Doesn't support the following lengthy and unlikely sassign case:
+ *    (UNLIKELY(PL_op->op_private & OPpASSIGN_CV_TO_GV))
+ *  These cases have a separate optimization, so are not handled here:
+ *    (PL_op->op_private & OPpASSIGN_BACKWARDS) {or,and,dor}assign
+*/
+
+PP(pp_padsv_store)
+{
+    dSP;
+    OP * const op = PL_op;
+    SV** const padentry = &PAD_SVl(op->op_targ);
+    SV* targ = *padentry; /* lvalue to assign into */
+    SV* const val = TOPs; /* RHS value to assign */
+
+    /* !OPf_STACKED is handled by pp_padsv2padsv */
+    assert(op->op_flags & OPf_STACKED);
+
+    /* Inlined, simplified pp_padsv here */
+    if (op->op_private & OPpLVAL_INTRO) {
+        if (!(op->op_private & OPpPAD_STATE)) {
+            save_clearsv(padentry);
+        }
+    }
+    if (op->op_private & OPpDEREF) {
+        targ = vivify_ref(targ, op->op_private & OPpDEREF);
+    }
+
+    /* Inlined, simplified pp_assign from here */
+    assert(TAINTING_get || !TAINT_get);
+    if (UNLIKELY(TAINT_get) && !SvTAINTED(val))
+        TAINT_NOT;
+
+    if (
+      UNLIKELY(SvTEMP(targ)) && !SvSMAGICAL(targ) && SvREFCNT(targ) == 1 &&
+      (!isGV_with_GP(targ) || SvFAKE(targ)) && ckWARN(WARN_MISC)
+    )
+        Perl_warner(aTHX_
+            packWARN(WARN_MISC), "Useless assignment to a temporary"
+        );
+    SvSetMagicSV(targ, val);
+
+    SETs(targ);
+    RETURN;
+}
+
 PP(pp_sassign)
 {
     dSP;

@@ -6,7 +6,7 @@ use strict;
 
 our($VERSION, @ISA, @EXPORT_OK);
 
-$VERSION = "1.58";
+$VERSION = "1.59";
 
 use Carp;
 use Exporter 'import';
@@ -312,7 +312,7 @@ invert_opset function.
 
     null stub scalar pushmark wantarray const defined undef
 
-    rv2sv sassign
+    rv2sv sassign padsv_store padsv2padsv
 
     rv2av aassign aelem aelemfast aelemfast_lex aslice kvaslice
     av2arylen

@@ -4116,6 +4116,7 @@ S_finalize_op(pTHX_ OP* o)
                   || family == OA_FILESTATOP
                   || family == OA_LOOPEXOP
                   || family == OA_METHOP
+                  || type == OP_PADSV_STORE /* ?? */
                   || type == OP_CUSTOM
                   || type == OP_NULL /* new_logop does this */
                   );
@@ -17202,7 +17203,6 @@ Perl_rpeep(pTHX_ OP *o)
         return;
 
     assert(o->op_type != OP_FREED);
-
     ENTER;
     SAVEOP();
     SAVEVPTR(PL_curcop);
@@ -17409,6 +17409,65 @@ Perl_rpeep(pTHX_ OP *o)
             }
         }
 
+        /* MAYBE THIS SHOULD COME LATER, TO NOT MESS UP ANY OTHER OPTIMIZATIONS? */
+
+        /* Convert something like this:
+         *     sassign
+         *         undef | padsv
+         *         padsv
+         * to this:
+         *     padsv2padsv
+         *
+         * This currently fails to optimize when it's o->op_other that leads to
+         * the optimizable structure, rather than o->op_next.
+         */
+
+        if ( o->op_next && ((o->op_next->op_type == OP_PADSV) ||
+             (o->op_next->op_type == OP_UNDEF && !(o->op_next->op_private))
+             ) && o->op_next->op_next &&
+             (o->op_next->op_next->op_type == OP_PADSV) &&
+              o->op_next->op_next->op_next &&
+            (o->op_next->op_next->op_next->op_type == OP_SASSIGN)
+           ) {
+            OP* rhs = o->op_next;
+            OP* lval = o->op_next->op_next;
+            OP* sa = o->op_next->op_next->op_next;
+
+            OpTYPE_set(sa, OP_PADSV2PADSV);
+
+            /* Reset op_private flags */
+            sa->op_private = 0;
+
+            sa->op_flags = (
+                OPf_MOD | (sa->op_flags & OPf_WANT) |
+                (sa->op_flags & OPf_PARENS)
+            );
+
+            switch (rhs->op_type) {
+                case OP_UNDEF:
+                    sa->op_private = (sa->op_private | OPpASSIGN_UNDEF);
+                    break;
+                case OP_PADSV:
+                    cUNOP_AUXx(sa)->op_aux = INT2PTR(UNOP_AUX_item *,rhs->op_targ);
+                    break;
+            }
+
+            /* Now remove the RHS OP */
+            op_null(rhs);
+
+            /* Take the targ from the PADSV */
+            sa->op_targ = lval->op_targ;
+
+            /* Take relevant private flasgs from lval */
+            sa->op_private = (sa->op_private | (lval->op_private &
+                            (OPpLVAL_INTRO|OPpPAD_STATE|OPpDEREF) ));
+
+            /* Now remove the PADSV */
+            op_null(lval);
+
+            /* Fixup the current o's op_next */
+            o->op_next = sa;
+        }
 
         switch (o->op_type) {
         case OP_DBSTATE:
@@ -18344,6 +18403,63 @@ Perl_rpeep(pTHX_ OP *o)
                     }
                 }
             }
+            OP* rhs = cBINOPx(o)->op_first;
+            OP* lval = cBINOPx(o)->op_last;
+
+            /* Combine a simple sassign into a simple padsv lvalue
+             * into a single OP. The RHS is untouched.
+             * Removal of both sassign kids for cases like:
+             * my $foo = undef; or my $bar = $other_padsv
+             * is handled elsewhere in rpeep. */
+            if (!(o->op_private & OPpASSIGN_BACKWARDS) &&
+                !(o->op_next->op_private & OPpASSIGN_CV_TO_GV) &&
+                 lval && (lval->op_type == OP_PADSV) &&
+                 /* Note that lval could be an ex-op, e.g. if optimized
+                  * away by multideref. Don't try anything further. */
+                 (OpSIBLING(rhs) == lval)
+               ) {
+
+                /* The PADSV will typically (always?) have these flags:
+                 * SCALAR - must not be incorporated into the new op,
+                 *          which must get context from the SASSIGN
+                 * REF    - ? TODO WHAT DOES THIS EVEN MEAN HERE?
+                 * MOD    - the new OP is always for an lvalue
+                 * SPECIAL- ? TODO WHAT DOES THIS EVEN MEAN HERE?
+                 * SLABBED - probably set when the new op is created?
+                 *
+                 * Besides the op and sibling context, which carry over
+                 * the SASSIGN will have KIDS & STACKED set. */
+
+                /* Note: OPf_WANT and OPf_PARENS flags on the SASSIGN
+                 * are not curently carried over. Not sure if they
+                 * matter or not by this point in compilation? */
+
+                OpTYPE_set(o, OP_PADSV_STORE);
+
+                o->op_flags = (
+                    OPf_MOD | OPf_KIDS | OPf_STACKED |
+                    (o->op_flags & OPf_WANT) |
+                    (o->op_flags & OPf_PARENS)
+                );
+
+                /* Reset op_private flags */
+                sa->op_private = 0;
+
+                /* Fixup the rhs */
+                OpLASTSIB_set(rhs, o);
+                rhs->op_next = o;
+
+                /* Take the targ from the PADSV */
+                o->op_targ = lval->op_targ;
+
+                /* Take relevant private flasgs from lval */
+                o->op_private = (lval->op_private &
+                                (OPpLVAL_INTRO|OPpPAD_STATE|OPpDEREF));
+
+                /* Now remove the PADSV */
+                op_null(lval);
+
+               }
             break;
 
         case OP_AASSIGN: {

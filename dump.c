@@ -1245,6 +1245,13 @@ S_do_op_dump_bar(pTHX_ I32 level, UV bar, PerlIO *file, const OP *o)
             SVfARG(multiconcat_stringify(o)));
         break;
 
+    case OP_PADSV2PADSV:
+        if (o->op_private & OPpASSIGN_UNDEF)
+            S_opdump_indent(aTHX_ o, level, bar, file, "SRC = &PL_sv_undef\n");
+        else
+            S_opdump_indent(aTHX_ o, level, bar, file, "SRC = %ld\n",
+                (long)cUNOP_AUXx(o)->op_aux);
+        break;
     case OP_CONST:
     case OP_HINTSEVAL:
     case OP_METHOD_NAMED:
