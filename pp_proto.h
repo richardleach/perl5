@@ -182,6 +182,7 @@ PERL_CALLCONV PP(pp_mkdir) __attribute__visibility__("hidden");
 PERL_CALLCONV PP(pp_modulo) __attribute__visibility__("hidden");
 PERL_CALLCONV PP(pp_multiconcat) __attribute__visibility__("hidden");
 PERL_CALLCONV PP(pp_multideref) __attribute__visibility__("hidden");
+PERL_CALLCONV PP(pp_multiop) __attribute__visibility__("hidden");
 PERL_CALLCONV PP(pp_multiply) __attribute__visibility__("hidden");
 PERL_CALLCONV PP(pp_nbit_and) __attribute__visibility__("hidden");
 PERL_CALLCONV PP(pp_nbit_or) __attribute__visibility__("hidden");

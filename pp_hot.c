@@ -268,6 +268,11 @@ PP_wrapped(pp_and, 2, 0)
     }
 }
 
+PP(pp_multiop)
+{
+    /* A BIG TODO! */
+}
+
 /*
  * Mashup of simple padsv + sassign OPs
  * Doesn't support the following lengthy and unlikely sassign case:

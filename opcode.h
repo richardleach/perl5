@@ -155,6 +155,7 @@ EXTCONST char* const PL_op_name[] INIT({
 	"gvsv",
 	"gv",
 	"gelem",
+	"multiop",
 	"padsv",
 	"padsv_store",
 	"padav",
@@ -581,6 +582,7 @@ EXTCONST char* const PL_op_desc[] INIT({
 	"scalar variable",
 	"glob value",
 	"glob elem",
+	"multiple ops",
 	"private variable",
 	"padsv scalar assignment",
 	"private array",
@@ -1012,6 +1014,7 @@ INIT({
 	Perl_pp_gvsv,
 	Perl_pp_gv,
 	Perl_pp_gelem,
+	Perl_pp_multiop,
 	Perl_pp_padsv,
 	Perl_pp_padsv_store,
 	Perl_pp_padav,
@@ -1438,6 +1441,7 @@ INIT({
 	Perl_ck_null,		/* gvsv */
 	Perl_ck_null,		/* gv */
 	Perl_ck_null,		/* gelem */
+	Perl_ck_null,		/* multiop */
 	Perl_ck_null,		/* padsv */
 	Perl_ck_sassign,	/* padsv_store */
 	Perl_ck_null,		/* padav */
@@ -1863,6 +1867,7 @@ EXTCONST U32 PL_opargs[] INIT({
 	0x00000644,	/* gvsv */
 	0x00000644,	/* gv */
 	0x00011244,	/* gelem */
+	0x00002400,	/* multiop */
 	0x00000044,	/* padsv */
 	0x00011104,	/* padsv_store */
 	0x00000040,	/* padav */
@@ -2568,6 +2573,7 @@ EXTCONST I16  PL_op_private_bitdef_ix[] = {
        9, /* gvsv */
       11, /* gv */
       12, /* gelem */
+      -1, /* multiop */
       13, /* padsv */
       16, /* padsv_store */
       19, /* padav */
@@ -3095,6 +3101,7 @@ EXTCONST U8 PL_op_private_valid[] = {
     /* GVSV       */ (OPpOUR_INTRO|OPpLVAL_INTRO),
     /* GV         */ (OPpEARLY_CV),
     /* GELEM      */ (OPpARG2_MASK),
+    /* MULTIOP    */ (0),
     /* PADSV      */ (OPpDEREF|OPpPAD_STATE|OPpLVAL_INTRO),
     /* PADSV_STORE */ (OPpARG1_MASK|OPpPAD_STATE|OPpLVAL_INTRO),
     /* PADAV      */ (OPpSLICEWARNING|OPpMAYBE_LVSUB|OPpTRUEBOOL|OPpPAD_STATE|OPpLVAL_INTRO),

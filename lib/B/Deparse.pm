@@ -7,7 +7,7 @@
 # This is based on the module of the same name by Malcolm Beattie,
 # but essentially none of his code remains.
 
-package B::Deparse 1.74;
+package B::Deparse 1.75;
 use strict;
 use Carp;
 use B qw(class main_root main_start main_cv svref_2object opnumber perlstring
@@ -4886,6 +4886,9 @@ sub pp_multideref {
     return $text;
 }
 
+sub pp_multiop {
+  # TODO: SKIP THIS OP AND DEPARSE THE OP_FIRST OPS INSTEAD
+}
 
 sub pp_aelem { maybe_local(@_, elem(@_, "[", "]", "padav")) }
 sub pp_helem { maybe_local(@_, elem(@_, "{", "}", "padhv")) }
