@@ -2532,6 +2532,239 @@ S_maybe_multideref(pTHX_ OP *start, OP *orig_o, UV orig_action, U8 hints)
     } /* for (pass = ...) */
 }
 
+
+/* S_maybe_multiop_list(): given an op_next chain of ops beginning at 'start'
+ * that potentially represent a series of one or more simple, sibling ops
+ * (e.g. pushmark, const, padsv) that can be aggregated, examine the chain,
+ * and if appropriate, convert thing to a single OP_MULTIOP.
+ * For now, for the ease of deparsing and potential future developments,
+ * the replaced op chain is moved into the op_first of the OP_MULTIOP, rather
+ * than being freed.
+ *
+ * e.g this:
+ *       <1> entersub[t3] sKRS/TARG
+ *          <0> pushmark s
+ *          <$> const[PV "Big::Module"] sM/BARE
+ *          <$> const[PV "one"] sM/BARE
+ *          <0> padsv[$one:1,3] sM
+ *          <$> const[PV "two"] sM/BARE
+ *          <$> undef s
+ *          <.> method_named[PV "new"] s
+ * becomes:
+ *       <1> entersub[t3] sKRS/TARG
+ *          <+> multiop (-> method_named)
+ *             <0> pushmark s
+ *             <$> const[PV "Big::Module"] sM/BARE
+ *             <$> const[PV "one"] sM/BARE
+ *             <0> padsv[$one:1,3] sM
+ *             <$> const[PV "two"] sM/BARE
+ *             <$> undef s
+ *          <.> method_named[PV "new"] s
+ *
+ * This is meant to be called within core only, from the likes of newLISTOP.
+ * In the future, there may be other optimizing functions that result in
+ * the creation of OP_MULTIOPs.
+ */
+
+STATIC OP*
+S_maybe_multiop_list(pTHX_ OP *start) {
+
+    UV extend = 0;
+    UNOP_AUX_item *arg_buf = NULL;
+    OP * multiop = NULL; /* New OP_MULTIOP, if any */
+    OP * wo = start;     /* Work-in-progress op */
+    OP * last = NULL;    /* Last OP successfully aggregated */
+    OP * nogood = NULL;  /* First OP that cannot be aggregated */
+    int action_count     = 0;     /* number of actions seen so far */
+    int action_ix        = 1;     /* action_count % (actions per IV) */
+                                  /* Encoded as I8s */
+                                  /* We will have an MULTIOP_EXIT at the end */
+    UV action_word       = 0;     /* all actions so far */
+    UNOP_AUX_item *action_ptr = NULL;
+    UNOP_AUX_item *items = NULL;
+
+    size_t opcount = 0;  /* Each will be encoded within 8 bits */
+
+    size_t blocks = 1;   /* Number of SV*s or whatever in the aux_buf */
+                         /* We will start with the arg to EXTEND */
+
+    if (UNLIKELY(!start))
+        return multiop;
+
+    /* arg_buf sizing pass */
+    while (1) {
+        if (!MULTIOP_CAN_DO(wo)) { /* TODO: OR IF WE ALREADY HAVE MAX OPS? */
+            nogood = wo;
+/* TODO Scan down the nogood chain and recursively call? */
+            break;
+        }
+        switch (wo->op_type) {
+            case OP_PUSHMARK:
+                break;
+            case OP_UNDEF:
+                ++extend;
+                break;
+            case OP_AELEMFAST_LEX:
+                ++action_ix; /* We're going to sneak the idx into the action_word */
+                /*FALLTHROUGH*/
+            case OP_CONST:
+            case OP_PADSV:
+            case OP_GV:
+            case OP_GVSV:
+                ++extend;
+                ++blocks; /* All need an element for SV* or PADOFFSET */
+                break;
+        }
+        ++opcount;
+        last = wo;
+        ++action_ix;
+        if (action_ix * MULTIOP_SHIFT > UVSIZE*8) {
+            ++blocks;
+            action_ix = 0;
+        }
+
+        if (!OpHAS_SIBLING(wo) || (wo->op_next != OpSIBLING(wo)))
+            break;
+        wo = wo->op_next;
+
+    }
+    if (opcount <2) /* There are not multiple candidates to combine. */
+        return multiop;
+
+    ++blocks; /* to store the in-progress action_word */
+    action_word = 0;
+
+    /* Now allocate the arg_buf */
+    arg_buf = (UNOP_AUX_item*)(PerlMemShared_malloc(
+                sizeof(UNOP_AUX_item) * blocks));
+
+    /* Create the new OP_MULTIOP instance */
+    multiop = newUNOP_AUX(OP_MULTIOP, OPf_WANT_SCALAR, start, arg_buf);
+
+    /* The first action is going to be to extend the argument stack */
+    arg_buf->uv = extend;
+
+    *items = (arg_buf[1]);
+    *action_ptr = (arg_buf[1]);
+
+    /* Split any non-aggregated ops off the chain and make them be
+    * multiop's sibling */
+/*TODO*/
+
+
+
+    /* Scan down the chain and recurse, just in case? */
+/*TODO*/
+
+    /* Convert ops to aux_buf actions */
+    wo = start;
+    while (opcount-- >0) {
+PerlIO_stdoutf("    action time on %s (0x%p)\n", OP_NAME(wo), wo);
+        switch (wo->op_type) {
+            case OP_PUSHMARK:
+                action_word |= (MULTIOP_PUSHMARK << (action_ix * MULTIOP_SHIFT));
+                break;
+
+            case OP_UNDEF:
+                action_word |= (MULTIOP_PUSH_UNDEF << (action_ix * MULTIOP_SHIFT));
+                break;
+
+            case OP_CONST:
+#ifdef USE_ITHREADS
+                if (cSVOPx(v)->op_sv) {
+                    action_word |= (MULTIOP_PUSH_SV << (action_ix * MULTIOP_SHIFT));
+                    (++items)->sv = wo->op_sv;
+                    wo->op_sv = NULL;
+                } else {
+                    action_word |= (MULTIOP_PUSH_TARG << (action_ix * MULTIOP_SHIFT));
+                    (++items)->pad_offset = wo->op_op_targ;
+                    wo->op_op_targ = 0;
+                }
+#else
+                action_word |= (MULTIOP_PUSH_SV << (action_ix * MULTIOP_SHIFT));
+                (++items)->sv = cSVOPx(wo)->op_sv;
+                cSVOPx(wo)->op_sv = NULL;
+#endif
+                break;
+
+            case OP_PADSV:
+                action_word |= (MULTIOP_PUSH_TARG << (action_ix * MULTIOP_SHIFT));
+                (++items)->pad_offset = wo->op_targ;
+                wo->op_targ = 0;
+                break;
+
+            case OP_GV:
+#ifdef USE_ITHREADS
+                action_word |= (MULTIOP_PUSH_TARG << (action_ix * MULTIOP_SHIFT));
+                (++items)->pad_offset = wo->op_targ;
+                wo->op_targ = 0;
+#else
+                action_word |= (MULTIOP_PUSH_SV << (action_ix * MULTIOP_SHIFT));
+                (++items)->sv = cSVOPx(wo)->op_sv;
+                cSVOPx(wo)->op_sv = NULL;
+#endif
+                break;
+
+            case OP_GVSV:
+#ifdef PERL_DONT_CREATE_GVSV
+
+#else
+
+#endif
+
+#ifdef USE_ITHREADS
+
+#else
+
+#endif
+
+                action_word |= (MULTIOP_PUSH_SV << (action_ix * MULTIOP_SHIFT));
+                (++items)->sv = cSVOPx(wo)->op_sv;
+                cSVOPx(wo)->op_sv = NULL;
+/* or */
+                action_word |= (MULTIOP_PUSH_TARG << (action_ix * MULTIOP_SHIFT));
+                (++items)->pad_offset = wo->op_targ;
+                wo->op_targ = 0;
+                break;
+
+            case OP_AELEMFAST_LEX:
+                action_word |= (MULTIOP_PUSH_AELEMFAST_LEX << (action_ix * MULTIOP_SHIFT));
+                /* Check if there's space for any more actions.
+                 * If not, reserve a new slot for it before adding
+                 * any more args to aux_buf. */
+                if ((action_ix + 1) * MDEREF_SHIFT > UVSIZE*8) {
+                    action_ptr->uv = action_word;
+                    action_ptr = ++items;
+                    action_word = 0;
+                    action_ix = 0;
+                }
+                action_word |= ( (I8)wo->op_private << (action_ix * MULTIOP_SHIFT));
+                (++items)->pad_offset = wo->op_targ;
+                wo->op_targ = 0;
+                break;
+        }
+        action_count++;
+        action_ix++;
+
+        /* Check if there's space for any more actions.
+         * If not, reserve a new slot for it before adding
+         * any more args to aux_buf. */
+        if ((action_ix + 1) * MDEREF_SHIFT > UVSIZE*8) {
+            action_ptr->uv = action_word;
+            action_ptr = ++items;
+            action_word = 0;
+            action_ix = 0;
+        }
+        wo = wo->op_next;
+    }
+    action_word |= (MULTIOP_EXIT << (action_ix * MULTIOP_SHIFT));
+    /* TODO SHOULD WE DO ANY MORE SHIFTS? */
+    action_ptr->uv = action_word;
+
+Perl_op_dump(multiop);
+    return multiop;
+}
+
 /* See if the ops following o are such that o will always be executed in
  * boolean context: that is, the SV which o pushes onto the stack will
  * only ever be consumed by later ops via SvTRUE(sv) or similar.

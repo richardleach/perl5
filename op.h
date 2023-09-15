@@ -1172,6 +1172,35 @@ struct op_argcheck_aux {
 
 #define MI_INIT_WORKAROUND_PACK "Module::Install::DSL"
 
+/* stuff for OP_MULTIOP */
+
+#define MULTIOP_CAN_DO(o) \
+    ((o) && (                               \
+            ((o)->op_type == OP_PUSHMARK)        \
+         || ((o)->op_type == OP_UNDEF)           \
+         || ((o)->op_type == OP_CONST)           \
+         || ( ((o)->op_type == OP_PADSV) && !(o)->op_private )          \
+         || ((o)->op_type == OP_AELEMFAST_LEX)   \
+    ))
+/*
+         || ((o)->op_type == OP_AELEMFAST)       \
+         || ((o)->op_type == OP_GV)              \
+         || ((o)->op_type == OP_GVSV)               \
+*/
+
+#define MULTIOP_SKIP               0
+#define MULTIOP_PUSHMARK           1
+#define MULTIOP_PUSH_UNDEF         2
+#define MULTIOP_PUSH_SV            3
+#define MULTIOP_PUSH_TARG          4
+#define MULTIOP_PUSH_AELEMFAST_LEX 5
+#define MULTIOP_PUSH_AELEMFAST     6
+#define MULTIOP_EXIT         12
+
+
+#define MULTIOP_ACTION_MASK 0xf
+#define MULTIOP_KEY_MASK 0xf0
+#define MULTIOP_SHIFT    4
 
 /*
  * ex: set ts=8 sts=4 sw=4 et:
