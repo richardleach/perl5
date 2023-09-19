@@ -453,6 +453,7 @@ $bits{method_super}{0} = $bf[0];
 @{$bits{msgsnd}}{3,2,1,0} = ($bf[4], $bf[4], $bf[4], $bf[4]);
 @{$bits{multiconcat}}{6,5,3,0} = ('OPpMULTICONCAT_APPEND', 'OPpMULTICONCAT_FAKE', 'OPpMULTICONCAT_STRINGIFY', $bf[0]);
 @{$bits{multideref}}{5,4,0} = ('OPpMULTIDEREF_DELETE', 'OPpMULTIDEREF_EXISTS', $bf[0]);
+$bits{multiop}{0} = $bf[0];
 @{$bits{multiply}}{1,0} = ($bf[1], $bf[1]);
 @{$bits{ncmp}}{1,0} = ($bf[1], $bf[1]);
 @{$bits{ne}}{1,0} = ($bf[1], $bf[1]);
