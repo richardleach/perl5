@@ -1181,6 +1181,7 @@ struct op_argcheck_aux {
          || ((o)->op_type == OP_CONST)           \
          || ( ((o)->op_type == OP_PADSV) && !(o)->op_private )          \
          || ((o)->op_type == OP_AELEMFAST_LEX)   \
+         || ((o)->op_type == OP_NULL)   \
     ))
 /*
          || ((o)->op_type == OP_AELEMFAST)       \
