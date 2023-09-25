@@ -2805,10 +2805,11 @@ PerlIO_stdoutf("    finalizing action_word: %lu\n    creating new action word: 0
     last->op_moresib = 0;
 
 PerlIO_stdoutf("last is %s at 0x%p\n", OP_NAME(last), last);
+
     action_word |= ((UV)MULTIOP_EXIT << (action_ix * MULTIOP_SHIFT));
     /* TODO SHOULD WE DO ANY MORE SHIFTS? */
     action_ptr->uv = action_word;
-PerlIO_stdoutf("    action_word: %lu\n", action_word);
+PerlIO_stdoutf("    action_word: %lu is at position %u\n", action_word, action_ptr - arg_buf);
 
 /* Perl_op_dump(multiop); */
     return multiop;

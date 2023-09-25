@@ -286,12 +286,12 @@ PP_wrapped(pp_and, 2, 0)
 PP(pp_multiop)
 {
 PerlIO_stdoutf("HERE I AM!\n");
-Perl_op_dump(PL_op);
+Perl_op_dump( op_parent ( op_parent(PL_op) ) );
     UNOP_AUX_item *items = cUNOP_AUXx(PL_op)->op_aux;
-    IV extendby = items->iv;
-    UV actions = (++items)->uv;
+UNOP_AUX_item *items_start = items;
+    IV extendby = items->iv;     // DEBUG: items pos 0
+    UV actions = (++items)->uv;  // DEBUG: items pos 1
     U8 actions_remaining = UVSIZE;
-
     assert(extendby >= 0);
     rpp_extend(extendby);
 
@@ -354,8 +354,10 @@ PerlIO_stdoutf("        It's an exit\n");
 PerlIO_stdoutf("AAARGH, HORRIBLE DEATH...MAYBE\n");
             actions_remaining = UVSIZE;
             actions = (++items)->uv;
+PerlIO_stdoutf("    Got a new actions block at position %u, it has value %lu\n", items - items_start, actions);
+        } else {
+            actions >>= MULTIOP_SHIFT;
         }
-        actions >>= MULTIOP_SHIFT; /* THIS IS NOT RIGHT, WE HAVE TO COUNT THE NUMBER WE'VE DONE SO FAR actions_remaining--; */
     }
     /* UNREACHABLE */
 }
