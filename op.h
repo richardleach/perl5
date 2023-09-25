@@ -1199,9 +1199,9 @@ struct op_argcheck_aux {
 #define MULTIOP_EXIT         12
 
 
-#define MULTIOP_ACTION_MASK 0xf
+#define MULTIOP_ACTION_MASK 0xff
 #define MULTIOP_KEY_MASK 0xf0
-#define MULTIOP_SHIFT    4
+#define MULTIOP_SHIFT    8
 
 /*
  * ex: set ts=8 sts=4 sw=4 et:

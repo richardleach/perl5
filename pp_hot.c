@@ -268,11 +268,96 @@ PP_wrapped(pp_and, 2, 0)
     }
 }
 
+/* Do the work of two or more RHS "push" ops e.g. UNDEF, CONST, PADSV,
+ * AELEMFAST_LEX, PUSHMARK. The relevant parts of each function body is
+ * very small, they all want to do something with PL_stack_sp, and most
+ * of them do an EXTEND(SP, 1). Amortizing the common overhead costs
+ * should give a useful performance boost.
+ *
+ * op_aux points to an array of unions of UV / IV / SV* / PADOFFSET.
+ * Each of these either contains a set of actions, or an argument, such as
+ * an IV to use as an array index, or a lexical var to retrieve.
+ * Several actions re stored per UV; we keep shifting new actions off the
+ * one UV, and only reload when it becomes zero.
+ *
+ * (This takes heavy inspiration from pp_multideref/pp_multiconcat.)
+ */
+
 PP(pp_multiop)
 {
-    /* A BIG TODO! */
 PerlIO_stdoutf("HERE I AM!\n");
-    return NORMAL;
+Perl_op_dump(PL_op);
+    UNOP_AUX_item *items = cUNOP_AUXx(PL_op)->op_aux;
+    IV extendby = items->iv;
+    UV actions = (++items)->uv;
+    U8 actions_remaining = UVSIZE;
+
+    assert(extendby >= 0);
+    rpp_extend(extendby);
+
+    while(1) {
+PerlIO_stdoutf("    actions_remaining: %i\n", actions_remaining);
+        switch ( actions & MULTIOP_ACTION_MASK ) {
+            case MULTIOP_SKIP:
+PerlIO_stdoutf("        It's a skip\n");
+                break; /* IS THIS CORRECT? I FORGET WHAT SKIP MEANS! */
+            case MULTIOP_PUSHMARK:
+PerlIO_stdoutf("        It's a pushmark\n");
+                PUSHMARK(PL_stack_sp);
+                break;
+            case MULTIOP_PUSH_UNDEF:
+PerlIO_stdoutf("        It's an undef\n");
+                rpp_push_1( &PL_sv_undef );
+                break;
+            case MULTIOP_PUSH_SV:
+                rpp_push_1( (++items)->sv );
+PerlIO_stdoutf("        It's a push_sv - 0x%p\n", items->sv);
+                break;
+            case MULTIOP_PUSH_TARG: {
+PerlIO_stdoutf("        It's a push_targ\n");
+                SV * const sv = PAD_SVl( (++items)->pad_offset );
+                rpp_push_1(sv);
+                break;
+            }
+            case MULTIOP_PUSH_AELEMFAST_LEX: {
+PerlIO_stdoutf("        It's an aelemfast_lex\n");
+                AV * const av = MUTABLE_AV(PAD_SV((++items)->pad_offset));
+                SV * sv = NULL;
+        if (--actions_remaining == 0) {
+DIE("AAARGH, HORRIBLE AELEMFAST_LEX DEATH\n");
+        }
+                const I8 key = actions >>= MULTIOP_SHIFT;  /* ??????? actions_remaining--; */
+
+                /* inlined av_fetch() for simple cases ... */
+                if (!SvRMAGICAL(av) && key >= 0 && key <= AvFILLp(av)) {
+                    sv = AvARRAY(av)[key];
+                    if (!sv)
+                        sv = &PL_sv_undef;
+                } else { /* ... else do it the hard way */
+                    SV ** svp = av_fetch(av, key, 0);
+                    SV *  sv = (svp ? *svp : &PL_sv_undef);
+
+                    if (SvRMAGICAL(av) && SvGMAGICAL(sv)) /* see note in pp_helem() */
+                        mg_get(sv);
+                }
+                rpp_push_1(sv);
+                break;
+            }
+            case MULTIOP_EXIT:
+PerlIO_stdoutf("        It's an exit\n");
+                return NORMAL;
+            default:
+                DIE(aTHX_ "Unrecognised MULTIOP type: %lu", actions);
+
+        } /* switch */
+        if (--actions_remaining == 0) {
+PerlIO_stdoutf("AAARGH, HORRIBLE DEATH...MAYBE\n");
+            actions_remaining = UVSIZE;
+            actions = (++items)->uv;
+        }
+        actions >>= MULTIOP_SHIFT; /* THIS IS NOT RIGHT, WE HAVE TO COUNT THE NUMBER WE'VE DONE SO FAR actions_remaining--; */
+    }
+    /* UNREACHABLE */
 }
 
 /*
