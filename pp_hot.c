@@ -271,6 +271,8 @@ PP_wrapped(pp_and, 2, 0)
 PP(pp_multiop)
 {
     /* A BIG TODO! */
+PerlIO_stdoutf("HERE I AM!\n");
+    return NORMAL;
 }
 
 /*

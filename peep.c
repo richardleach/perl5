@@ -2574,6 +2574,7 @@ S_maybe_multiop_list(pTHX_ OP *start) {
     OP * multiop = NULL; /* New OP_MULTIOP, if any */
     OP * wo = start;     /* Work-in-progress op */
     OP * last = NULL;    /* Last OP successfully aggregated */
+    OP * presib = NULL;  /* Used for splicing */
     OP * nogood = NULL;  /* First OP that cannot be aggregated */
     int action_count     = 0;     /* number of actions seen so far */
     int action_ix        = 1;     /* action_count % (actions per IV) */
@@ -2599,6 +2600,8 @@ S_maybe_multiop_list(pTHX_ OP *start) {
             break;
         }
         switch (wo->op_type) {
+            case OP_NULL:
+                break;
             case OP_PUSHMARK:
                 break;
             case OP_UNDEF:
@@ -2615,7 +2618,8 @@ S_maybe_multiop_list(pTHX_ OP *start) {
                 ++blocks; /* All need an element for SV* or PADOFFSET */
                 break;
         }
-        ++opcount;
+        if (wo->op_type != OP_NULL)
+            ++opcount;
         last = wo;
         ++action_ix;
         if (action_ix * MULTIOP_SHIFT > UVSIZE*8) {
@@ -2639,13 +2643,39 @@ S_maybe_multiop_list(pTHX_ OP *start) {
                 sizeof(UNOP_AUX_item) * blocks));
 
     /* Create the new OP_MULTIOP instance */
-    multiop = newUNOP_AUX(OP_MULTIOP, OPf_WANT_SCALAR, start, arg_buf);
+
+/*
+    splice = op_sibling_splice(NULL, OP_TYPE_IS(start, OP_NULL) ? start->op_next : start, opcount, NULL);
+*/
+
+    presib = ( OP_TYPE_IS(start, OP_NULL) ) ? start->op_next : start;
+    multiop = newUNOP_AUX(OP_MULTIOP, OPf_WANT_SCALAR, presib, arg_buf);
+
+    multiop->op_next = last->op_next;
+    multiop->op_sibparent = last->op_sibparent;
+    multiop->op_moresib = last->op_moresib;
+
+    if (! last->op_moresib) { /* Need to fix up op_last or something? */
+        /* TODO ASSERT IT'S A LISTOP? */
+        last->op_sibparent = multiop;
+        cLISTOPx(last->op_next)->op_last = multiop;
+    } else {
+PerlIO_stdoutf("AAIIIEEE! TODO! next sibling is %s at 0x%p\n", OP_NAME( last->op_sibparent ), last->op_sibparent);
+    }
+
+    start->op_next = multiop;
+    start->op_sibparent = multiop;
+
+PerlIO_stdoutf("New multiop at 0x%p\n", multiop);
+PerlIO_stdoutf("    last is a %s at 0x%p\n", OP_NAME(last), last);
+PerlIO_stdoutf("    subparent is 0x%p\n and moresib is %u\n", multiop->op_sibparent, multiop->op_moresib );
+
 
     /* The first action is going to be to extend the argument stack */
     arg_buf->uv = extend;
 
-    *items = (arg_buf[1]);
-    *action_ptr = (arg_buf[1]);
+    items = &arg_buf[1];
+    action_ptr = &arg_buf[1];
 
     /* Split any non-aggregated ops off the chain and make them be
     * multiop's sibling */
@@ -2657,7 +2687,7 @@ S_maybe_multiop_list(pTHX_ OP *start) {
 /*TODO*/
 
     /* Convert ops to aux_buf actions */
-    wo = start;
+    wo = presib;
     while (opcount-- >0) {
 PerlIO_stdoutf("    action time on %s (0x%p)\n", OP_NAME(wo), wo);
         switch (wo->op_type) {
@@ -2755,8 +2785,14 @@ PerlIO_stdoutf("    action time on %s (0x%p)\n", OP_NAME(wo), wo);
             action_word = 0;
             action_ix = 0;
         }
+        last = wo;
         wo = wo->op_next;
     }
+
+    last->op_sibparent = multiop;
+    last->op_moresib = 0;
+
+PerlIO_stdoutf("last is %s at 0x%p\n", OP_NAME(last), last);
     action_word |= (MULTIOP_EXIT << (action_ix * MULTIOP_SHIFT));
     /* TODO SHOULD WE DO ANY MORE SHIFTS? */
     action_ptr->uv = action_word;
@@ -3317,6 +3353,18 @@ Perl_rpeep(pTHX_ OP *o)
             }
             goto nothin;
         case OP_NULL:
+            if (OP_TYPE_IS_OR_WAS(o, OP_PUSHMARK) && o->op_moresib && (o->op_next == o->op_sibparent) ) {
+                OP * first_sib = o->op_next;
+                OP *multi = S_maybe_multiop_list(o);
+                if (multi) {
+/*
+                    cLISTOPx(multi->op_next)->op_first = multi;
+                    cLISTOPx(o)->op_last = multi;
+*/
+                    Perl_op_dump( multi->op_next );
+                    Perl_op_dump( op_parent( multi) );
+                }
+            }
             if (o->op_targ == OP_NEXTSTATE
                 || o->op_targ == OP_DBSTATE)
             {
@@ -4377,8 +4425,8 @@ Perl_rpeep(pTHX_ OP *o)
                 cpeep(aTHX_ o, oldop);
             break;
         }
-
         }
+
         /* did we just null the current op? If so, re-process it to handle
          * eliding "empty" ops from the chain */
         if (o->op_type == OP_NULL && oldop && oldop->op_next == o) {
