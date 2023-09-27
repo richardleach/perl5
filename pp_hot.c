@@ -285,42 +285,34 @@ PP_wrapped(pp_and, 2, 0)
 
 PP(pp_multiop)
 {
-PerlIO_stdoutf("HERE I AM!\n");
-Perl_op_dump( op_parent ( op_parent(PL_op) ) );
     UNOP_AUX_item *items = cUNOP_AUXx(PL_op)->op_aux;
-UNOP_AUX_item *items_start = items;
     IV extendby = items->iv;     // DEBUG: items pos 0
     UV actions = (++items)->uv;  // DEBUG: items pos 1
     U8 actions_remaining = UVSIZE;
     assert(extendby >= 0);
     rpp_extend(extendby);
 
+/* Perl_op_dump( op_parent(PL_op) ); */
+
     while(1) {
-PerlIO_stdoutf("    actions_remaining: %i\n", actions_remaining);
         switch ( actions & MULTIOP_ACTION_MASK ) {
             case MULTIOP_SKIP:
-PerlIO_stdoutf("        It's a skip\n");
                 break; /* IS THIS CORRECT? I FORGET WHAT SKIP MEANS! */
             case MULTIOP_PUSHMARK:
-PerlIO_stdoutf("        It's a pushmark\n");
                 PUSHMARK(PL_stack_sp);
                 break;
             case MULTIOP_PUSH_UNDEF:
-PerlIO_stdoutf("        It's an undef\n");
                 rpp_push_1( &PL_sv_undef );
                 break;
             case MULTIOP_PUSH_SV:
                 rpp_push_1( (++items)->sv );
-PerlIO_stdoutf("        It's a push_sv - 0x%p\n", items->sv);
                 break;
             case MULTIOP_PUSH_TARG: {
-PerlIO_stdoutf("        It's a push_targ\n");
                 SV * const sv = PAD_SVl( (++items)->pad_offset );
                 rpp_push_1(sv);
                 break;
             }
             case MULTIOP_PUSH_AELEMFAST_LEX: {
-PerlIO_stdoutf("        It's an aelemfast_lex\n");
                 AV * const av = MUTABLE_AV(PAD_SV((++items)->pad_offset));
                 SV * sv = NULL;
         if (--actions_remaining == 0) {
@@ -344,17 +336,14 @@ DIE("AAARGH, HORRIBLE AELEMFAST_LEX DEATH\n");
                 break;
             }
             case MULTIOP_EXIT:
-PerlIO_stdoutf("        It's an exit\n");
                 return NORMAL;
             default:
                 DIE(aTHX_ "Unrecognised MULTIOP type: %lu", actions);
 
         } /* switch */
         if (--actions_remaining == 0) {
-PerlIO_stdoutf("AAARGH, HORRIBLE DEATH...MAYBE\n");
             actions_remaining = UVSIZE;
             actions = (++items)->uv;
-PerlIO_stdoutf("    Got a new actions block at position %u, it has value %lu\n", items - items_start, actions);
         } else {
             actions >>= MULTIOP_SHIFT;
         }

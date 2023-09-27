@@ -2578,7 +2578,7 @@ S_maybe_multiop_list(pTHX_ OP *start) {
     OP * multiop = NULL; /* New OP_MULTIOP, if any */
     OP * wo = start;     /* Work-in-progress op */
     OP * last = NULL;    /* Last OP successfully aggregated */
-    OP * presib = NULL;  /* Used for splicing */
+    OP * presib = NULL;  /* Used for checks/splicing */
     OP * nogood = NULL;  /* First OP that cannot be aggregated */
     int action_count     = 0;
     int action_ix        = 0;     /* action_count % (actions per IV) */
@@ -2595,6 +2595,15 @@ S_maybe_multiop_list(pTHX_ OP *start) {
 
     if (UNLIKELY(!start))
         return multiop;
+
+    presib = op_parent(start);
+    if (OP_TYPE_IS(presib,OP_NULL))
+        presib = op_parent(presib);
+    if (OP_TYPE_IS(op_parent(start), OP_CONCAT) || OP_TYPE_IS(op_parent(start), OP_MULTICONCAT))
+        /* Possibly some negative interaction with MULTICONCAT, so bail here */
+        return multiop;
+    presib = NULL;
+
     /* arg_buf sizing pass */
     while (1) {
         if (!MULTIOP_CAN_DO(wo)) { /* TODO: OR IF WE ALREADY HAVE MAX OPS? */
@@ -2625,7 +2634,6 @@ S_maybe_multiop_list(pTHX_ OP *start) {
         last = wo;
         ++action_ix;
         if (action_ix * MULTIOP_SHIFT > UVSIZE*8) {
-PerlIO_stdoutf("  scan phase: need another action block\n");
             ++blocks;
             action_ix = 0;
         }
@@ -2647,13 +2655,6 @@ PerlIO_stdoutf("  scan phase: need another action block\n");
                 sizeof(UNOP_AUX_item) * blocks));
 
     /* Create the new OP_MULTIOP instance */
-
-/*
-    splice = op_sibling_splice(NULL, OP_TYPE_IS(start, OP_NULL) ? start->op_next : start, opcount, NULL);
-*/
-
-/* Perl_op_dump( op_parent(start)); */
-
     presib = ( OP_TYPE_IS(start, OP_NULL) ) ? start->op_next : start;
     multiop = newUNOP_AUX(OP_MULTIOP, OPf_WANT_SCALAR, presib, arg_buf);
 
@@ -2669,16 +2670,11 @@ PerlIO_stdoutf("  scan phase: need another action block\n");
         if ((PL_opargs[ parent_type ] & OA_CLASS_MASK) == OA_LISTOP)
             cLISTOPx(last->op_next)->op_last = multiop;
     } else {
-PerlIO_stdoutf("AAIIIEEE! TODO! next sibling is %s at 0x%p\n", OP_NAME( last->op_sibparent ), last->op_sibparent);
+/*PerlIO_stdoutf("AAIIIEEE! TODO! next sibling is %s at 0x%p\n", OP_NAME( last->op_sibparent ), last->op_sibparent);*/
     }
 
     start->op_next = multiop;
     start->op_sibparent = multiop;
-
-PerlIO_stdoutf("New multiop at 0x%p\n", multiop);
-PerlIO_stdoutf("    last is a %s at 0x%p\n", OP_NAME(last), last);
-PerlIO_stdoutf("    subparent is 0x%p\n and moresib is %u\n", multiop->op_sibparent, multiop->op_moresib );
-
 
     /* The first action is going to be to extend the argument stack */
     arg_buf->uv = extend;
@@ -2686,14 +2682,9 @@ PerlIO_stdoutf("    subparent is 0x%p\n and moresib is %u\n", multiop->op_sibpar
     items = &arg_buf[1];
     action_ptr = &arg_buf[1];
 
-    /* Scan down the chain and recurse, just in case? */
-/*TODO*/
-
     /* Convert ops to aux_buf actions */
-PerlIO_stdoutf("    action_word starts as: %lu\n\n", action_word);
     wo = presib;
     while (opcount-- >0) {
-PerlIO_stdoutf("    action time on %s (0x%p)\n", OP_NAME(wo), wo);
         switch (wo->op_type) {
             case OP_PUSHMARK:
                 action_word |= ((UV)MULTIOP_PUSHMARK << (action_ix * MULTIOP_SHIFT));
@@ -2716,9 +2707,6 @@ PerlIO_stdoutf("    action time on %s (0x%p)\n", OP_NAME(wo), wo);
                 }
 #else
 {
-PerlIO_stdoutf("BOOOOOOOOOOOPPPPPPPP\n");
-PerlIO_stdoutf("MULTIOP_PUSH_SV is '%lu', (action_ix * MULTIOP_SHIFT) == '%lu', shifted is '%lu'\n",
- MULTIOP_PUSH_SV, (action_ix * MULTIOP_SHIFT), (MULTIOP_PUSH_SV << (action_ix * MULTIOP_SHIFT)));
                 action_word |= ((UV)MULTIOP_PUSH_SV << (action_ix * MULTIOP_SHIFT));
                 (++items)->sv = cSVOPx(wo)->op_sv;
 }
@@ -2727,7 +2715,6 @@ PerlIO_stdoutf("MULTIOP_PUSH_SV is '%lu', (action_ix * MULTIOP_SHIFT) == '%lu', 
                 break;
 
             case OP_PADSV:
-PerlIO_stdoutf("Action will be %u, ix is %u, shift is %u\n", MULTIOP_PUSH_TARG, action_ix, MULTIOP_SHIFT);
                 action_word |= ((UV)MULTIOP_PUSH_TARG << (action_ix * MULTIOP_SHIFT));
                 (++items)->pad_offset = wo->op_targ;
 /*                wo->op_targ = 0; */
@@ -2783,7 +2770,6 @@ PerlIO_stdoutf("Action will be %u, ix is %u, shift is %u\n", MULTIOP_PUSH_TARG, 
 /*                wo->op_targ = 0; */
                 break;
         }
-PerlIO_stdoutf("    action_word after ix %i (shift == %u) is currently: %lu\n\n", action_ix, (action_ix * MULTIOP_SHIFT), action_word);
         action_count++;
         action_ix++;
 
@@ -2791,7 +2777,6 @@ PerlIO_stdoutf("    action_word after ix %i (shift == %u) is currently: %lu\n\n"
          * If not, reserve a new slot for it before adding
          * any more args to aux_buf. */
         if ((action_ix + 1) * MULTIOP_SHIFT > UVSIZE*8) {
-PerlIO_stdoutf("    finalizing action_word: %lu\n    creating new action word: 0n\n", action_word);
             action_ptr->uv = action_word;
             action_ptr = ++items;
             action_word = 0;
@@ -2804,12 +2789,8 @@ PerlIO_stdoutf("    finalizing action_word: %lu\n    creating new action word: 0
     last->op_sibparent = multiop;
     last->op_moresib = 0;
 
-PerlIO_stdoutf("last is %s at 0x%p\n", OP_NAME(last), last);
-
     action_word |= ((UV)MULTIOP_EXIT << (action_ix * MULTIOP_SHIFT));
-    /* TODO SHOULD WE DO ANY MORE SHIFTS? */
     action_ptr->uv = action_word;
-PerlIO_stdoutf("    action_word: %lu is at position %u\n", action_word, action_ptr - arg_buf);
 
 /* Perl_op_dump(multiop); */
     return multiop;
@@ -3373,7 +3354,7 @@ Perl_rpeep(pTHX_ OP *o)
 
                 if (multi) {
 /*                    Perl_op_dump( multi->op_next ); */
-                    Perl_op_dump( op_parent( multi) );
+/*                    Perl_op_dump( op_parent( multi) ); */
                 }
             }
             if (o->op_targ == OP_NEXTSTATE
