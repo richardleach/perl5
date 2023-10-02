@@ -2621,8 +2621,11 @@ S_maybe_multiop_list(pTHX_ OP *start) {
             case OP_AELEMFAST_LEX:
                 ++action_ix; /* We're going to sneak the idx into the action_word */
                 /*FALLTHROUGH*/
+            case OP_PADSV: /* May support LVALINTRO, DREF, STATE in the future */
+                if (wo->op_private)
+                    goto sizing_break;
+                /*FALLTHROUGH*/
             case OP_CONST:
-            case OP_PADSV:
             case OP_GV:
             case OP_GVSV:
                 ++extend;
@@ -2643,6 +2646,7 @@ S_maybe_multiop_list(pTHX_ OP *start) {
         wo = wo->op_next;
 
     }
+  sizing_break:
     if (opcount <2) /* There are not multiple candidates to combine. */
         return multiop;
 
