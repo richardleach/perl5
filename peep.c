@@ -2580,6 +2580,7 @@ S_maybe_multiop_list(pTHX_ OP *start) {
     OP * last = NULL;    /* Last OP successfully aggregated */
     OP * presib = NULL;  /* Used for checks/splicing */
     OP * nogood = NULL;  /* First OP that cannot be aggregated */
+    OP * parent = NULL;
     int action_count     = 0;
     int action_ix        = 0;     /* action_count % (actions per IV) */
                                   /* Encoded as I8s */
@@ -2596,13 +2597,46 @@ S_maybe_multiop_list(pTHX_ OP *start) {
     if (UNLIKELY(!start))
         return multiop;
 
-    presib = op_parent(start);
-    if (OP_TYPE_IS(presib,OP_NULL))
-        presib = op_parent(presib);
-    if (OP_TYPE_IS(op_parent(start), OP_CONCAT) || OP_TYPE_IS(op_parent(start), OP_MULTICONCAT))
+    parent = op_parent(start);
+    if (OP_TYPE_IS(parent,OP_NULL))
+        parent = op_parent(parent);
+    if (OP_TYPE_IS(parent, OP_CONCAT) || OP_TYPE_IS(parent, OP_MULTICONCAT))
         /* Possibly some negative interaction with MULTICONCAT, so bail here */
         return multiop;
-    presib = NULL;
+
+    if (
+        (parent->op_type != OP_SUBSTR)
+        && (parent->op_type != OP_QUOTEMETA)
+        && (parent->op_type != OP_BLESS)
+        && (parent->op_type != OP_VEC)
+        && (parent->op_type != OP_INDEX)
+        && (parent->op_type != OP_RINDEX)
+        && (parent->op_type != OP_JOIN)
+        && (parent->op_type != OP_LIST)
+        && (parent->op_type != OP_GLOB)
+        && (parent->op_type != OP_ATAN2)
+        && (parent->op_type != OP_SPRINTF)
+        && (parent->op_type != OP_FORMLINE)
+        && (parent->op_type != OP_CRYPT)
+        && (parent->op_type != OP_ANONLIST)
+/*
+        && (parent->op_type != OP_ANONHASH)
+*/
+/*
+        && (parent->op_type !=OP_ )
+*/
+       )
+           return multiop;
+/*
+else
+        Perl_op_dump(parent);
+*/
+/*
+        return multiop;
+*/
+if (parent->op_type == OP_ANONLIST)
+Perl_op_dump(parent);
+
 
     /* arg_buf sizing pass */
     while (1) {
@@ -2654,6 +2688,27 @@ S_maybe_multiop_list(pTHX_ OP *start) {
     action_word = 0;
     action_ix = 0;
 
+
+    if (OP_TYPE_IS(parent, OP_HELEM))
+        return multiop;
+    if (OP_TYPE_IS(parent, OP_HSLICE))
+        return multiop;
+    if (OP_TYPE_IS(parent, OP_KVHSLICE))
+        return multiop;
+
+    /* Is it a slice? */
+    if (OP_TYPE_IS(parent, OP_HSLICE)) {
+        /* Oh, 'eck */
+        /* Is it okay for "start" to be a pushmark? */
+        UNOP *rop = cUNOPx(cLISTOPx(parent)->op_last);
+        SVOP *key_op = cSVOPx(start);
+/*
+Perl_op_dump(parent);
+PerlIO_stdoutf("rop is 0x%p, key_op is 0x%p\n", rop, key_op);
+        check_hash_fields_and_hekify(rop, key_op, 1);
+*/
+    }
+
     /* Now allocate the arg_buf */
     arg_buf = (UNOP_AUX_item*)(PerlMemShared_malloc(
                 sizeof(UNOP_AUX_item) * blocks));
@@ -2665,6 +2720,9 @@ S_maybe_multiop_list(pTHX_ OP *start) {
     multiop->op_next = last->op_next;
     multiop->op_sibparent = last->op_sibparent;
     multiop->op_moresib = last->op_moresib;
+
+    /* TODO - what's the max size of op_private?*/
+    multiop->op_private = opcount;
 
     if (! last->op_moresib) { /* Need to fix up op_last or something? */
         OP * parent = op_parent(multiop);
@@ -2679,6 +2737,9 @@ S_maybe_multiop_list(pTHX_ OP *start) {
 
     start->op_next = multiop;
     start->op_sibparent = multiop;
+
+if (parent->op_type == OP_ANONLIST)
+Perl_op_dump(parent);
 
     /* The first action is going to be to extend the argument stack */
     arg_buf->uv = extend;
@@ -2703,36 +2764,36 @@ S_maybe_multiop_list(pTHX_ OP *start) {
                 if (cSVOPx(v)->op_sv) {
                     action_word |= ((UV)MULTIOP_PUSH_SV << (action_ix * MULTIOP_SHIFT));
                     (++items)->sv = wo->op_sv;
-/*                    wo->op_sv = NULL; */
+/*                    wo->op_sv = NULL;*/
                 } else {
                     action_word |= ((UV)MULTIOP_PUSH_TARG << (action_ix * MULTIOP_SHIFT));
                     (++items)->pad_offset = wo->op_op_targ;
-/*                    wo->op_op_targ = 0; */
+/*                    wo->op_op_targ = 0;*/
                 }
 #else
 {
                 action_word |= ((UV)MULTIOP_PUSH_SV << (action_ix * MULTIOP_SHIFT));
                 (++items)->sv = cSVOPx(wo)->op_sv;
 }
-/*                 cSVOPx(wo)->op_sv = NULL; */
+/*                 cSVOPx(wo)->op_sv = NULL;*/
 #endif
                 break;
 
             case OP_PADSV:
                 action_word |= ((UV)MULTIOP_PUSH_TARG << (action_ix * MULTIOP_SHIFT));
                 (++items)->pad_offset = wo->op_targ;
-/*                wo->op_targ = 0; */
+/*                wo->op_targ = 0;*/
                 break;
 
             case OP_GV:
 #ifdef USE_ITHREADS
                 action_word |= ((UV)MULTIOP_PUSH_TARG << (action_ix * MULTIOP_SHIFT));
                 (++items)->pad_offset = wo->op_targ;
-/*                wo->op_targ = 0; */
+/*                wo->op_targ = 0;*/
 #else
                 action_word |= ((UV)MULTIOP_PUSH_SV << (action_ix * MULTIOP_SHIFT));
                 (++items)->sv = cSVOPx(wo)->op_sv;
-/*                cSVOPx(wo)->op_sv = NULL; */
+/*                cSVOPx(wo)->op_sv = NULL;*/
 #endif
                 break;
 
@@ -2751,11 +2812,11 @@ S_maybe_multiop_list(pTHX_ OP *start) {
 
                 action_word |= ((UV)MULTIOP_PUSH_SV << (action_ix * MULTIOP_SHIFT));
                 (++items)->sv = cSVOPx(wo)->op_sv;
-                cSVOPx(wo)->op_sv = NULL;
+/*                cSVOPx(wo)->op_sv = NULL;*/
 /* or */
                 action_word |= ((UV)MULTIOP_PUSH_TARG << (action_ix * MULTIOP_SHIFT));
                 (++items)->pad_offset = wo->op_targ;
-                wo->op_targ = 0;
+/*                wo->op_targ = 0;*/
                 break;
 
             case OP_AELEMFAST_LEX:
@@ -2771,7 +2832,7 @@ S_maybe_multiop_list(pTHX_ OP *start) {
                 }
                 action_word |= ( (UV)(wo->op_private) << (action_ix * MULTIOP_SHIFT));
                 (++items)->pad_offset = wo->op_targ;
-/*                wo->op_targ = 0; */
+/*                wo->op_targ = 0;*/
                 break;
         }
         action_count++;
@@ -2795,6 +2856,8 @@ S_maybe_multiop_list(pTHX_ OP *start) {
 
     action_word |= ((UV)MULTIOP_EXIT << (action_ix * MULTIOP_SHIFT));
     action_ptr->uv = action_word;
+
+TODO: IMPLEMENT aux_buf dumping function
 
 /* Perl_op_dump(multiop); */
     return multiop;

@@ -315,10 +315,22 @@ PP(pp_multiop)
             case MULTIOP_PUSH_AELEMFAST_LEX: {
                 AV * const av = MUTABLE_AV(PAD_SV((++items)->pad_offset));
                 SV * sv = NULL;
+
+
+
+
+
+        const I8 key = actions >>= MULTIOP_SHIFT;
+
+  /* Is this correct, or have we shifted in a block too early? */
+
         if (--actions_remaining == 0) {
-DIE("AAARGH, HORRIBLE AELEMFAST_LEX DEATH\n");
+            actions_remaining = UVSIZE;
+            actions = (++items)->uv;
         }
-                const I8 key = actions >>= MULTIOP_SHIFT;  /* ??????? actions_remaining--; */
+
+
+
 
                 /* inlined av_fetch() for simple cases ... */
                 if (!SvRMAGICAL(av) && key >= 0 && key <= AvFILLp(av)) {
@@ -342,6 +354,7 @@ DIE("AAARGH, HORRIBLE AELEMFAST_LEX DEATH\n");
 
         } /* switch */
         if (--actions_remaining == 0) {
+            actions >>= MULTIOP_SHIFT;
             actions_remaining = UVSIZE;
             actions = (++items)->uv;
         } else {
