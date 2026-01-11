@@ -523,7 +523,40 @@ Does not use C<TARG>.  See also C<L</XPUSHu>>, C<L</mPUSHu>> and C<L</PUSHu>>.
 
 /* set TARG to the NV value n. If do_taint is false,
  * assume that PL_tainted can never be true */
-#define TARGn(n, do_taint) \
+#if NVSIZE <= IVSIZE
+#  define TARGn(n, do_taint) \
+    STMT_START {                                                        \
+        NV TARGn_nv = n;                                                \
+        /* targ_flags allows a cheap SvNOK_only() when TARG is an       \
+         * uncomplicated NV or PVNV. */                                 \
+        U32 targ_flags = (SvFLAGS(TARG) &                               \
+            (SVTYPEMASK|SVf_THINKFIRST|SVf_OOK));                       \
+        if (                                                            \
+              (targ_flags == SVt_NV )                                   \
+            & (do_taint ? !TAINT_get : 1))                              \
+        {                                                               \
+            /* Assert that flags which SvNOK_only() would test or       \
+             * clear can't be set, because we're SVt_NV */              \
+            assert(!(SvFLAGS(TARG) &                                    \
+                (SVf_OOK|SVf_UTF8|(SVf_OK & ~(SVf_NOK|SVp_NOK)))));     \
+            SvFLAGS(TARG) |= (SVf_NOK|SVp_NOK);                         \
+            /* Bodyless NV, so can access the head directly */          \
+            assert(    &(TARG->sv_u.svu_nv)                             \
+                    == &(((XPVNV*) SvANY(TARG))->xnv_u.xnv_nv));        \
+            TARG->sv_u.svu_nv = TARGn_nv;                               \
+        } else if (                                                     \
+              (targ_flags == SVt_PVNV)                                  \
+            & (do_taint ? !TAINT_get : 1))                              \
+        {                                                               \
+            SvFLAGS(TARG) &= ~(SVf_OK|SVf_UTF8|SVf_IVisUV);             \
+            SvFLAGS(TARG) |= (SVf_NOK|SVp_NOK);                         \
+            SvNV_set(TARG, TARGn_nv);                                   \
+        }                                                               \
+        else                                                            \
+            sv_setnv_mg(targ, TARGn_nv);                                \
+    } STMT_END
+#else
+#  define TARGn(n, do_taint) \
     STMT_START {                                                        \
         NV TARGn_nv = n;                                                \
         /* targ_flags allows a cheap SvNOK_only() when TARG is an       \
@@ -551,6 +584,7 @@ Does not use C<TARG>.  See also C<L</XPUSHu>>, C<L</mPUSHu>> and C<L</PUSHu>>.
         else                                                            \
             sv_setnv_mg(targ, TARGn_nv);                                \
     } STMT_END
+#endif
 
 #ifdef PERL_RC_STACK
 #  define PUSHs(s)	(assert(!rpp_stack_is_rc()), *++sp = (s))
