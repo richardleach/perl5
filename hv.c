@@ -4275,6 +4275,411 @@ Perl_hv_assert(pTHX_ HV *hv)
 
 #endif
 
+
+
+/*
+=for apidoc hv_multi_store
+
+TODO
+
+=cut
+*/
+
+//This function behaves as if the "flags" argument to Perl_hv_common was ==0;
+
+/* Functions such as pp_anonhash want to copy val SVs. Functions such as core's
+ * class system's injected_constructor want to point to the actual val SVs. */
+
+/* This function handles complete key/val pairs. If there's a missing trailing
+ * value, the caller has to take care of it. */
+
+// If there's a missing trailing value, we can still detect from PL_stack_sp, no?
+
+
+SV ** //error code?
+Perl_hv_multi_store(pTHX_ HV *hv, SV** args, SV **sp, bool val_copy)
+{
+    assert(hv);
+    assert(!SvIS_FREED(hv));
+    assert(SvTYPE(hv) == SVt_PVHV);
+    PERL_ARGS_ASSERT_HV_MULTI_STORE;
+
+// DO SOMETHING WITH RETVAL!?!?
+//    int retval = 0;
+//    int flags = 0;
+
+//PerlIO_stdoutf("MULTI_STORE\n");
+
+    if (UNLIKELY(SvMAGICAL(hv) || SvREADONLY(hv) || hv == PL_strtab))
+        goto completely_slow;
+
+    { /* Fast path starts here */
+
+    /* It should now be safe to insert all key/arg pairs without calling
+     * Perl_hv_common() at all. This avoids the 8-arg function call, as
+     * well as many branching points within that function that we know are
+     * unnecessary. */
+
+Size_t pairs = (PL_stack_sp - args) >> 1;
+
+/* args points to the SV _below_ the first key on the stack. Bump it up. */
+args++;
+
+    STRLEN new_bucket_count =
+//            (IV_MAX - cur_buckets < pairs) ? IV_MAX : cur_buckets + pairs;
+            ( (IV_MAX - HvTOTALKEYS(hv)) < pairs) ? IV_MAX : HvTOTALKEYS(hv) + pairs;
+    if (new_bucket_count <= HvMAX(hv)) {
+        new_bucket_count = HvMAX(hv);
+    } else {
+          /* HvMAX+1 must be a power of two: hv_iternext's
+           * (riter ^ rand) & max is only a permutation if it is */
+          while (new_bucket_count & (new_bucket_count + 1))
+              new_bucket_count |= new_bucket_count >> 1, new_bucket_count |= new_bucket_count >> 2,
+              new_bucket_count |= new_bucket_count >> 4, new_bucket_count |= new_bucket_count >> 8,
+              new_bucket_count |= new_bucket_count >> 16;
+    }
+
+    XPVHV *xhv = (XPVHV*)SvANY(hv);
+
+    STRLEN cur_buckets = HvMAX(hv) + 1;
+
+//PerlIO_stdoutf("IV_MAX is %lu, HvTOTALKEYS is %lu, IV_MAX - HvTOTALKEYS(hv) is %lu\n", IV_MAX, HvTOTALKEYS(hv), IV_MAX - HvTOTALKEYS(hv));
+
+if(!HvARRAY(hv)) {
+//PerlIO_stdoutf("    No buckets, cur: %li, new: %li, so splitting %li\n", cur_buckets, new_bucket_count, (cur_buckets > new_bucket_count) ? cur_buckets - 1: new_bucket_count);
+char *array;
+Newxz(array, PERL_HV_ARRAY_ALLOC_BYTES( new_bucket_count + 1), char);
+HvARRAY(hv) = (HE**)array;
+HvMAX(hv) = new_bucket_count;
+//hv_ksplit(hv, (cur_buckets > new_bucket_count) ? cur_buckets - 1: new_bucket_count);
+//PerlIO_stdoutf("        Now haz bukkits. %li of them\n", HvMAX(hv));
+} else    if (new_bucket_count > cur_buckets) {
+//    if (pairs > cur_buckets) {
+//PerlIO_stdoutf("Splitting from %u to %u buckets for %u pairs. HvTOTALKEYS is %u\n", cur_buckets, new_bucket_count, pairs, HvTOTALKEYS(hv));
+        /* Note: hv_kvsplit also handles when there is no HvARRAY */
+//PerlIO_stdoutf("    Moar bukkits, splitting %li -> %li\n", cur_buckets, new_bucket_count);
+        hv_ksplit(hv, new_bucket_count);
+    }
+    else {
+//        PerlIO_stdoutf("%lu is bigger than %lu?\n", cur_buckets, new_bucket_count);
+    }
+
+    HE** const hvarray = HvARRAY(hv);
+    if (UNLIKELY(!hvarray)) /* Could happen if !hvarray and pairs is huge */
+{
+//PerlIO_stdoutf("    Oh, no bucket???\n");
+        goto completely_slow;
+}
+
+    const bool hv_does_share_keys = HvSHAREKEYS(hv);
+    const bool hv_has_aux = HvHasAUX(hv);
+    const I32 hvmax = (I32)HvMAX(hv);
+    I32 keycount = xhv->xhv_keys;
+    SV** const send = PL_stack_sp;
+
+    while (args + 1 < send) { /* There are at least 2 SV*s to process */
+       // ^ this should probably be pairs-->0 , right?
+
+        HE *entry;
+        HE **oentry;
+        HEK *keysv_hek = NULL;
+        int flags = 0;
+        STRLEN klen; U32 hash;
+
+
+        SV* val = args[1];
+        SvGETMAGIC(val);
+        if (UNLIKELY(val == &PL_sv_placeholder)) {
+            xhv->xhv_keys = keycount;
+            goto completely_slow;
+        }
+        val = (val_copy) ? newSVsv_flags(val, SV_DO_COW_SVSETSV)
+                         : SvREFCNT_inc(val);
+
+        SV* keysv = args[0];
+
+        if (SvGMAGICAL(keysv))
+            keysv = sv_mortalcopy(keysv);
+
+        const char *key = SvPV_const(keysv, klen);
+//PerlIO_stdoutf("Looking at key: %s\n", key);
+
+        bool is_utf8 = (SvUTF8(keysv) != 0);
+
+        if (SvIsCOW_shared_hash(keysv)) {
+            flags = HVhek_KEYCANONICAL | (is_utf8 ? HVhek_UTF8 : 0);
+            hash = SvSHARED_HASH(keysv);
+
+            if (is_utf8)
+                HvHASKFLAGS_on(hv); // TODO use a per-hv bool rather than doing HvHASKFLAGS_on(hv) here...?
+
+            oentry = &(hvarray)[hash & hvmax];
+            entry = *oentry;
+
+            if (LIKELY(hv_does_share_keys)) {
+                keysv_hek  = SvSHARED_HEK_FROM_PV(SvPVX_const(keysv));
+                if (LIKELY(!entry)) { /* Bucket is completely empty */
+                    entry = new_HE();
+                    HeNEXT(entry) = NULL;
+                    HeKEY_hek(entry) = share_hek_hek(keysv_hek);
+                    *oentry = entry;
+                    HeVAL(entry) = val;
+keycount++;
+args += 2;
+                    continue;
+                }
+            } else {
+                if (!entry) { /* Bucket is completely empty */
+
+                }
+            }
+        } else {
+            if (is_utf8) {
+                /* Caller wants to retain the key. Use a fresh allocation
+                 * to store any converted value. */
+                void * free_me = NULL;
+                if (! utf8_to_bytes_new_pv((const U8 **) &key, &klen, &free_me)) {
+                    flags |= HVhek_UTF8; /* Couldn't convert */
+                } else {
+                    NOW_NATIVE;
+                    if (free_me)
+                        flags |= HVhek_FREEKEY;
+                }
+                HvHASKFLAGS_on(hv); // TODO use a per-hv bool rather than doing HvHASKFLAGS_on(hv) here...?
+            }
+            PERL_HASH(hash, key, klen);
+            oentry = &(hvarray)[hash & hvmax];
+            entry = *oentry;
+        }
+
+        args += 2;
+keycount++;
+
+        if (!entry) {
+            /* Bucket is completely empty */
+            entry = new_HE();
+            HeNEXT(entry) = NULL;
+
+            if (LIKELY(keysv_hek)) {
+                HeKEY_hek(entry) = share_hek_hek(keysv_hek);
+            } else if (LIKELY(hv_does_share_keys)) {
+                HeKEY_hek(entry) = share_hek_flags(key, klen, hash, flags);
+            } else {
+                HeKEY_hek(entry) = save_hek_flags(key, klen, hash, flags);
+            }
+
+            *oentry = entry;
+            HeVAL(entry) = val;
+
+//            keycount++;
+            continue;
+        } else {
+            /* Bucket is not empty, is this key already present? */
+
+            if (keysv_hek) {
+                int keysv_flags = HEK_FLAGS(keysv_hek);
+                HE  *orig_entry = entry;
+
+                for (; entry; entry = HeNEXT(entry)) {
+                    HEK *hek = HeKEY_hek(entry);
+                    if (hek == keysv_hek)
+                        goto found;
+                    if (HEK_FLAGS(hek) != keysv_flags)
+                        break; /* need to do full match */
+                }
+
+                if (!entry)
+                    goto not_found;
+                /* failed on shortcut - do full search loop */
+                entry = orig_entry;
+            }
+
+            for (; entry; entry = HeNEXT(entry)) {
+                if (HeHASH(entry) != hash)              /* strings can't be equal */
+                    continue;
+                if (HeKLEN(entry) != (I32)klen)
+                    continue;
+                if (memNE(HeKEY(entry),key,klen))       /* is this it? */
+                    continue;
+                if ((HeKFLAGS(entry) ^ flags) & HVhek_UTF8)
+                    continue;
+                goto found;
+            }
+
+            if (UNLIKELY(entry)) { /* Who's providing duplicate keys?!? */
+              found:
+
+                if ((HeKFLAGS(entry) ^ flags) & HVhek_WASUTF8) {
+                    /* Note: refer to Perl_hv_common for explanatory comments */
+                    if ((HeKFLAGS(entry) & HVhek_NOTSHARED) == 0) {
+                        // TODO: Revisit if this is always true
+                        assert(!(flags & HVhek_FREEKEY));
+// TODO: new_hek is unused
+//                        HEK * const new_hek
+//                            = share_hek_flags(key, klen, hash, flags);
+
+
+                        // TODO: Revisit the rest of this block. Check it hard.
+                        /* Keys are shared, so the flag can't just be written:
+                         * share a HEK with the flags we need, unshare the old
+                         * one. share_hek_flags() would consume the key, but
+                         * the found path below still has to free it. */
+                        HEK * const new_hek
+                            = share_hek_flags(key, klen, hash,
+                                              flags & ~HVhek_FREEKEY);
+                        unshare_hek(HeKEY_hek(entry));
+                        HeKEY_hek(entry) = new_hek;
+
+                    } else {
+                        HeKFLAGS(entry) ^= HVhek_WASUTF8;
+                    }
+
+//                    assert(!(flags & HVhek_ENABLEHVKFLAGS));
+//                    /* Otherwise this code should do: HvHASKFLAGS_on(hv); */
+                }
+
+                assert(HeVAL(entry) != &PL_sv_placeholder); /* We didn't add any */
+                SvREFCNT_dec(HeVAL(entry));
+
+                HeVAL(entry) = val;
+
+                if (UNLIKELY(flags & HVhek_FREEKEY))
+                    Safefree(key);
+
+/* This didn't add a new key after all */
+//xhv->xhv_keys--;
+keycount--;
+                continue;
+
+            } else { /* Bucket is not empty, but no matching HE found */
+              not_found:
+                entry = new_HE();
+                if (LIKELY(keysv_hek)) {
+                    HeKEY_hek(entry) = share_hek_hek(keysv_hek);
+                } else if (LIKELY(hv_does_share_keys)) {
+                    HeKEY_hek(entry) = share_hek_flags(key, klen, hash, flags);
+                } else {
+                    ASSUME(!(flags & HVhek_FREEKEY));
+                    HeKEY_hek(entry) = save_hek_flags(key, klen, hash, flags);
+                }
+                HeVAL(entry) = val;
+#ifdef PERL_HASH_RANDOMIZE_KEYS
+                if (PL_HASH_RAND_BITS_ENABLED) {
+                    UPDATE_HASH_RAND_BITS_KEY(key,klen);
+                    if ( PL_hash_rand_bits & 1 ) {
+                        HeNEXT(entry) = HeNEXT(*oentry);
+                        HeNEXT(*oentry) = entry;
+                    } else {
+                        HeNEXT(entry) = *oentry;
+                        *oentry = entry;
+                    }
+                } else
+#endif
+                {
+                    HeNEXT(entry) = *oentry;
+                    *oentry = entry;
+                }
+
+                /* key & val have now been inserted */
+
+#ifdef PERL_HASH_RANDOMIZE_KEYS
+                /* Note the silenced check in Perl_hv_common */
+                if (hv_has_aux) {
+                    MAYBE_UPDATE_HASH_RAND_BITS_KEY(key,klen);
+                    HvAUX(hv)->xhv_rand= (U32)PL_hash_rand_bits;
+                }
+#endif
+//                keycount++;
+            }
+        }
+//keycount++;
+//        xhv->xhv_keys++; /* HvTOTALKEYS(hv)++ */  /* TODO: Can we do this in one blast? Maybe if all SvGETMAGIC() is called upfront?? */
+
+    } /* End of fast bulk insertion loop */
+    xhv->xhv_keys = keycount;
+
+/* Caller has to deal with this
+    if (UNLIKELY(args < PL_stack_sp))
+        goto lone_key;
+*/
+
+
+/* Can we ever need to do this? */
+#if 0
+    if (UNLIKELY(DO_HSPLIT(xhv)))
+        goto do_hsplit;
+#endif
+
+//PerlIO_stdoutf("    Fast path done, HvMAX is %lu\n", HvMAX(hv));
+    return args;
+
+    } /* Fast path ends here */
+
+
+  completely_slow:
+//PerlIO_stdoutf("    Going slow?\n");
+
+    while (args + 1 < PL_stack_sp) { /* There are at least 2 SV*s to process */
+        SV* keysv = args[0];
+        SV* val = args[1];
+
+        if (SvGMAGICAL(keysv))
+            keysv = sv_mortalcopy(keysv);
+
+        SvGETMAGIC(val);
+        val = (val_copy ) ? newSVsv_flags(val, SV_DO_COW_SVSETSV)
+                          : SvREFCNT_inc(val);
+
+        (void) hv_store_ent(hv,keysv,val,0);
+
+        args += 2;
+    }
+
+    if (LIKELY(args == PL_stack_sp))
+        return args;
+
+#if 0
+  lone_key:
+//PerlIO_stdoutf("    lone_key?\n");
+
+    assert(args == PL_stack_sp - 1); /* There's a keysv without a val */
+    SV* keysv = args[0];
+
+    if (SvGMAGICAL(keysv))
+        keysv = sv_mortalcopy(keysv);
+
+    (void) hv_store_ent(hv,keysv,
+                (val_copy) ? newSV_type(SVt_NULL) /* e.g. pp_anonhash */
+                           : &PL_sv_undef         /* e.g. injected_constructor */
+                           ,0); // anonhash
+#endif
+
+    /* Shouldn't strictly be necessary if the slow path was 100% taken. */
+    {
+
+//      do_hsplit:
+        XPVHV *xhv = (XPVHV*)SvANY(hv);
+        if(UNLIKELY(DO_HSPLIT(xhv))) {
+            const STRLEN oldsize = xhv->xhv_max + 1;
+            const U32 items = (U32)HvPLACEHOLDERS_get(hv);    // we should just keep this in a var, right?
+
+            if (items) {
+                clear_placeholders(hv, items);
+                if (DO_HSPLIT(xhv)) { /* What, still? */
+                    hsplit(hv, oldsize, oldsize * 2);
+                }
+
+            } else {
+                hsplit(hv, oldsize, oldsize * 2);
+            }
+        }
+
+    }
+    return args;
+}
+
+
+
 /*
  * ex: set ts=8 sts=4 sw=4 et:
  */

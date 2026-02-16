@@ -6509,26 +6509,17 @@ PP(pp_anonhash)
     if (pairs == 0)
         return NORMAL;
 
-    if (pairs > PERL_HASH_DEFAULT_HvMAX) {
-        hv_ksplit(hv, pairs);
-    }
+    /* Handle complete key pairs */
+    MARK = hv_multi_store(hv, MARK, PL_stack_sp, 1);
 
-    while (++MARK < PL_stack_sp) {
+    if (UNLIKELY(MARK < PL_stack_sp)) {
         SV *key = *MARK;
         if (SvGMAGICAL(key))
             key = sv_mortalcopy(key);
 
-        SV *val;
-        if (++MARK < PL_stack_sp)
-        {
-            SvGETMAGIC(*MARK);
-            val = newSVsv_flags(*MARK, SV_DO_COW_SVSETSV);
-        }
-        else
-        {
-            ck_warner(packWARN(WARN_MISC), "Odd number of elements in anonymous hash");
-            val = newSV_type(SVt_NULL);
-        }
+        ck_warner(packWARN(WARN_MISC), "Odd number of elements in anonymous hash");
+        SV *val = newSV_type(SVt_NULL);
+
         (void)hv_store_ent(hv,key,val,0);
     }
 

@@ -1822,6 +1822,10 @@ Adp	|void	|hv_ksplit	|NN HV *hv				\
 Admp	|void	|hv_magic	|NN HV *hv				\
 				|NULLOK GV *gv				\
 				|int how
+Cdpx	|SV **	|hv_multi_store |NN HV *hv				\
+				|NN SV **args				\
+				|NN SV **sp				\
+				|bool val_copy
 Adp	|void	|hv_name_set	|NN HV *hv				\
 				|NULLOK const char *name		\
 				|U32 len				\

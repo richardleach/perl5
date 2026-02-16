@@ -2986,6 +2986,18 @@ Perl_hv_magic(pTHX_ HV *hv, GV *gv, int how)
                  PERL_UNUSED_CONTEXT_FOR_ARGS_ASSERT;  \
     } STMT_END
 
+PERL_CALLCONV SV **
+Perl_hv_multi_store(pTHX_ HV *hv, SV **args, SV **sp, bool val_copy)
+        Perl_attribute_nonnull_aTHX
+        Perl_attribute_nonnull(pTHX_1)
+        Perl_attribute_nonnull(pTHX_2)
+        Perl_attribute_nonnull(pTHX_3);
+#define PERL_ARGS_ASSERT_HV_MULTI_STORE         \
+    STMT_START { Perl_assert_aTHX; assert(hv);                              \
+                 assert(SvTYPE(hv) == SVt_PVHV); assert(args); assert(sp);  \
+                 PERL_UNUSED_CONTEXT_FOR_ARGS_ASSERT;                       \
+    } STMT_END
+
 PERL_CALLCONV void
 Perl_hv_name_set(pTHX_ HV *hv, const char *name, U32 len, U32 flags)
         Perl_attribute_nonnull_aTHX
