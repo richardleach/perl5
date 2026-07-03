@@ -530,6 +530,7 @@ addbits('aassign', 2 => qw(OPpASSIGN_TRUEBOOL BOOL));  # if (@a = (...)) {...}
 # for their private flags
 
 addbits('sassign',
+    5 => qw(OPpASSIGN_WAS_LIST  WAS_LIST),
     6 => qw(OPpASSIGN_BACKWARDS BKWARD), # Left & right switched
     7 => qw(OPpASSIGN_CV_TO_GV  CV2GV),  # Possible optimisation for constants
 );

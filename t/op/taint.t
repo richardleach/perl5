@@ -2623,8 +2623,8 @@ is eval { no warnings; eval $::x.1 }, 1, 'reset does not taint undef';
 
     $b = $TAINT;
     $b = ""; # untaint;
-    (($a) = ($TAINT. "x")), ($b = $b . "x");
-    is_tainted   $a, "list assign post tainted expression a";
+    ((my $ttt) = ($TAINT. "x")), ($b = $b . "x");
+    is_tainted   $ttt, "list assign post tainted expression a";
     isnt_tainted $b, "list assign post tainted expression b";
 }
 

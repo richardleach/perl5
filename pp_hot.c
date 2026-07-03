@@ -334,6 +334,9 @@ PP(pp_padsv_store)
         warner(packWARN(WARN_MISC), "Useless assignment to a temporary");
     SvSetMagicSV(targ, val);
 
+    if (UNLIKELY(PL_op->op_private & OPpASSIGN_WAS_LIST))
+        TAINT_NOT;
+
     assert(GIMME_V == G_VOID);
     rpp_popfree_1_NN();
     return NORMAL;
@@ -495,6 +498,10 @@ PP(pp_sassign)
     )
         warner(packWARN(WARN_MISC), "Useless assignment to a temporary");
     SvSetMagicSV(left, right);
+
+    if (UNLIKELY(PL_op->op_private & OPpASSIGN_WAS_LIST))
+        TAINT_NOT;
+
     if (LIKELY(GIMME_V == G_VOID))
         rpp_popfree_2_NN(); /* pop left and right */
     else {

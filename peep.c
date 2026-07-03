@@ -301,7 +301,7 @@ S_maybe_multiconcat(pTHX_ OP *o)
         /* expr = ..... */
         if (o->op_ppaddr != PL_ppaddr[OP_SASSIGN])
             return;
-        if (o->op_private & (OPpASSIGN_BACKWARDS|OPpASSIGN_CV_TO_GV))
+        if (o->op_private & (OPpASSIGN_BACKWARDS|OPpASSIGN_CV_TO_GV|OPpASSIGN_WAS_LIST))
             return;
         assert(!(o->op_private & ~OPpARG2_MASK)); /* barf on unknown flags */
 

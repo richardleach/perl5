@@ -9004,6 +9004,7 @@ Perl_newASSIGNOP(pTHX_ I32 flags, OP *left, I32 optype, OP *right)
 
     OP *o;
     I32 assign_type;
+    bool was_list = false;
 
     switch (optype) {
         case 0: break;
@@ -9029,6 +9030,7 @@ Perl_newASSIGNOP(pTHX_ I32 flags, OP *left, I32 optype, OP *right)
         * efficient if it was instead: my $x = .... */
     ) {
         left->op_flags &= ~OPf_PARENS;
+        was_list = true;
     }
 
     if ((assign_type = assignment_type(left)) == ASSIGN_LIST) {
@@ -9202,6 +9204,8 @@ Perl_newASSIGNOP(pTHX_ I32 flags, OP *left, I32 optype, OP *right)
     else {
         o = newBINOP(OP_SASSIGN, flags,
             scalar(right), op_lvalue(scalar(left), OP_SASSIGN) );
+        if (was_list)
+            o->op_private |= OPpASSIGN_WAS_LIST;
     }
     return o;
 }
