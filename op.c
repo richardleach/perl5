@@ -9019,6 +9019,18 @@ Perl_newASSIGNOP(pTHX_ I32 flags, OP *left, I32 optype, OP *right)
                 op_lvalue(scalar(left), optype), scalar(right));
     }
 
+    if (OP_TYPE_IS(left, OP_PADSV) && (left->op_flags & OPf_PARENS)
+        && !left->op_moresib
+        && ((left->op_private & (OPpLVAL_INTRO|OPpPAD_STATE)) == OPpLVAL_INTRO)
+       /* this is: my ($x) = .... */
+       && right && !right->op_moresib
+       && (PL_opargs[right->op_type] & OA_RETSCALAR)
+       /* but there should be no behaviour change and it would be more
+        * efficient if it was instead: my $x = .... */
+    ) {
+        left->op_flags &= ~OPf_PARENS;
+    }
+
     if ((assign_type = assignment_type(left)) == ASSIGN_LIST) {
         OP *state_var_op = NULL;
         static const char no_list_state[] = "Initialization of state variables"
